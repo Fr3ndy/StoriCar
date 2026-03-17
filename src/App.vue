@@ -32,11 +32,9 @@ async function handleSignOut() {
   router.push('/login')
 }
 
-const appName = computed(() => data.value.settings?.appName || 'Storicar')
-
 const pageTitle = computed(() => {
   const titles = {
-    'home': appName.value,
+    'home': 'Storicar',
     'vehicles': 'Veicoli',
     'fuel': 'Rifornimenti',
     'fuel-add': 'Nuovo Rifornimento',
@@ -50,7 +48,7 @@ const pageTitle = computed(() => {
     'fuel-prices': 'Prezzi Carburante',
     'settings': 'Impostazioni'
   }
-  return titles[route.name] || appName.value
+  return titles[route.name] || 'Storicar'
 })
 
 const moreRoutes = ['vehicles', 'stats', 'map', 'settings', 'expenses', 'expenses-add', 'expenses-edit', 'deadlines']

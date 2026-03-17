@@ -30,7 +30,6 @@ const defaultFuelType   = computed({ get: () => getSetting('defaultFuelType') ||
 const showOdometer      = computed({ get: () => getSetting('showOdometer') !== false, set: v => setSetting('showOdometer', v) })
 const showRemainingRange = computed({ get: () => getSetting('showRemainingRange') !== false, set: v => setSetting('showRemainingRange', v) })
 const notifyDays        = computed({ get: () => getSetting('notifyDeadlinesDays') ?? 30, set: v => setSetting('notifyDeadlinesDays', Number(v)) })
-const appName           = computed({ get: () => getSetting('appName') || 'Storicar', set: v => setSetting('appName', v) })
 
 // Mappa carburanti
 const fuelMapLat    = computed({ get: () => getSetting('fuelMapLat')    ?? null,  set: v => setSetting('fuelMapLat', v) })
@@ -145,7 +144,7 @@ async function resetData() {
         </svg>
       </div>
       <div class="app-hero-info">
-        <div class="app-hero-name">{{ appName }}</div>
+        <div class="app-hero-name">Storicar</div>
         <div class="app-hero-sub">Car Expense Tracker · v2.0</div>
       </div>
     </div>
@@ -474,12 +473,12 @@ async function resetData() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
         </svg>
       </div>
-      <div class="app-footer-name">{{ appName }}</div>
+      <div class="app-footer-name">Storicar</div>
       <div class="app-footer-version">Versione 2.0.0</div>
       <div class="app-footer-desc">Traccia le spese della tua auto in modo semplice</div>
       <div class="app-footer-author">
         Sviluppato da
-        <a href="https://github.com/Fr3ndy/DriveLog/" target="_blank" rel="noopener" class="app-footer-link">Andrea Spina</a>
+        <a href="https://github.com/Fr3ndy/StoriCar" target="_blank" rel="noopener" class="app-footer-link">Andrea Spina</a>
       </div>
     </div>
 
