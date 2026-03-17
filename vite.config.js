@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: process.env.VITE_BASE_URL || '/',
+  base: process.env.VITE_BASE_URL || '/StoriCar/',
   build: {
     minify: 'esbuild'
   },
