@@ -389,10 +389,15 @@ watch(selectedId, (newId, oldId) => {
   position: absolute;
   top: 10px;
   left: 10px;
+  right: 10px;
   z-index: 500;
   display: flex;
+  flex-wrap: nowrap;
   gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.fuel-selector-overlay::-webkit-scrollbar { display: none; }
 .fuel-chip {
   padding: 4px 10px;
   border-radius: 14px;
