@@ -1,0 +1,84 @@
+import { createApp } from 'vue'
+import { createRouter, createWebHashHistory } from 'vue-router'
+import App from './App.vue'
+import './styles/main.css'
+import { supabase } from './lib/supabase'
+
+const routes = [
+  { path: '/login', name: 'login', component: () => import('./views/LoginView.vue') },
+  { path: '/', name: 'home', component: () => import('./views/HomeView.vue') },
+  { path: '/vehicles', name: 'vehicles', component: () => import('./views/VehiclesView.vue') },
+  { path: '/fuel', name: 'fuel', component: () => import('./views/FuelView.vue') },
+  { path: '/fuel/add', name: 'fuel-add', component: () => import('./views/FuelAddView.vue') },
+  { path: '/fuel/edit/:id', name: 'fuel-edit', component: () => import('./views/FuelAddView.vue') },
+  { path: '/expenses', name: 'expenses', component: () => import('./views/ExpensesView.vue') },
+  { path: '/expenses/add', name: 'expenses-add', component: () => import('./views/ExpenseAddView.vue') },
+  { path: '/expenses/edit/:id', name: 'expenses-edit', component: () => import('./views/ExpenseAddView.vue') },
+  { path: '/deadlines', name: 'deadlines', component: () => import('./views/DeadlinesView.vue') },
+  { path: '/stats', name: 'stats', component: () => import('./views/StatsView.vue') },
+  { path: '/map', name: 'map', component: () => import('./views/MapView.vue') },
+  { path: '/fuel-prices', name: 'fuel-prices', component: () => import('./views/FuelPricesView.vue') },
+  { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+]
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes
+})
+
+console.log('[main] app avviata - base URL:', import.meta.env.BASE_URL)
+
+// Attende che Supabase abbia una sessione valida (con timeout)
+function waitForSession(timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    // Prima controlla subito
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        resolve(data.session)
+        return
+      }
+
+      // Nessuna sessione immediata: aspetta onAuthStateChange per max timeoutMs
+      const timer = setTimeout(() => resolve(null), timeoutMs)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) {
+          clearTimeout(timer)
+          subscription.unsubscribe()
+          resolve(session)
+        }
+      })
+    })
+  })
+}
+
+router.beforeEach(async (to) => {
+  const { data: { session } } = await supabase.auth.getSession()
+  let auth = !!session
+  console.log('[router] navigazione verso:', to.name, '| auth:', auth)
+
+  // Se non c'è sessione ma c'è un token in localStorage (OAuth appena completato),
+  // aspettiamo un momento che Supabase inizializzi la sessione
+  if (!auth) {
+    const projectRef = 'spcbihreqyzldrwxbsru'
+    const storageKey = 'sb-' + projectRef + '-auth-token'
+    const stored = localStorage.getItem(storageKey)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        if (parsed.access_token && parsed.expires_at > Math.floor(Date.now() / 1000)) {
+          // Token valido in localStorage, aspetta che Supabase lo carichi
+          const sess = await waitForSession(2000)
+          auth = !!sess
+        }
+      } catch (e) {}
+    }
+  }
+
+  if (to.name !== 'login' && !auth) return { name: 'login' }
+  if (to.name === 'login' && auth) return { name: 'home' }
+})
+
+const app = createApp(App)
+app.use(router)
+app.mount('#app')
+console.log('[main] Vue app montata')
