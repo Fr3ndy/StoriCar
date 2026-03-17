@@ -3,20 +3,12 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/DriveLog/',
+  base: process.env.VITE_BASE_URL || '/',
   build: {
     minify: 'esbuild'
   },
   esbuild: {
     drop: []
-  },
-  server: {
-    proxy: {
-      '/fuel-prices.php': {
-        target: 'http://carb.test/',
-        changeOrigin: true
-      }
-    }
   },
   plugins: [
     vue(),
