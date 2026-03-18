@@ -207,8 +207,9 @@ function initMap() {
           display:flex;
           align-items:center;
           gap:4px;
+          width:max-content;
         ">
-          <span style="opacity:.75;font-size:10px">${count}×</span>${label}
+          <span style="font-weight: 400;">${count}×</span>${label}
         </div>`,
         iconAnchor: [28, 14],
       })
