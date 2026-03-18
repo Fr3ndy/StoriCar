@@ -2,9 +2,12 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
+import { useAuth } from '../composables/useAuth'
+import AuthWall from '../components/AuthWall.vue'
 import L from 'leaflet'
 
 const router = useRouter()
+const { isGuest } = useAuth()
 const { data, getDefaultVehicleId, setDefaultVehicle, getVehicle } = useStorage()
 
 const mapContainer = ref(null)
@@ -120,6 +123,16 @@ function formatDate(dateStr) {
 
 <template>
   <div class="map-view">
+    <!-- Auth wall per ospiti -->
+    <AuthWall
+      v-if="isGuest"
+      title="Mappa rifornimenti"
+      description="Visualizza sulla mappa tutti i tuoi rifornimenti e traccia i percorsi. Richiede un account."
+      feature-name="la mappa dei rifornimenti"
+      icon="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"
+    />
+
+    <template v-if="!isGuest">
     <!-- No vehicles -->
     <div v-if="!hasVehicles" class="empty-state">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -168,6 +181,7 @@ function formatDate(dateStr) {
         </div>
       </div>
     </div>
+    </template><!-- /v-if="!isGuest" -->
   </div>
 </template>
 

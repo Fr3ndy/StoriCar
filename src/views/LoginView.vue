@@ -1,22 +1,27 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 
-const { signInWithGoogle } = useAuth()
+const router = useRouter()
+const { signInWithGoogle, continueAsGuest } = useAuth()
 const loading = ref(false)
-const error = ref('')
+const error   = ref('')
 
 async function login() {
   loading.value = true
-  error.value = ''
+  error.value   = ''
   try {
     await signInWithGoogle()
-    // Il browser viene rediretto a Google.
-    // Al ritorno, il router guard gestirà il redirect a '/'
   } catch (e) {
-    error.value = 'Errore durante il login. Riprova.'
+    error.value   = 'Errore durante il login. Riprova.'
     loading.value = false
   }
+}
+
+function enterAsGuest() {
+  continueAsGuest()
+  router.push('/')
 }
 </script>
 
@@ -44,8 +49,19 @@ async function login() {
         {{ loading ? 'Reindirizzamento...' : 'Accedi con Google' }}
       </button>
 
+      <div class="divider"><span>oppure</span></div>
+
+      <button class="btn-guest" @click="enterAsGuest" :disabled="loading">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+        </svg>
+        Continua come ospite
+      </button>
+
       <p class="login-note">
-        I tuoi dati sono privati e accessibili solo dal tuo account.
+        Da ospite i dati sono salvati solo su questo dispositivo.<br/>
+        Accedi con Google per sincronizzarli ovunque.
       </p>
     </div>
   </div>
@@ -83,11 +99,7 @@ async function login() {
   margin-bottom: 20px;
   box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
 }
-.login-logo svg {
-  width: 32px;
-  height: 32px;
-  color: white;
-}
+.login-logo svg { width: 32px; height: 32px; color: white; }
 
 .login-title {
   font-size: 22px;
@@ -96,7 +108,6 @@ async function login() {
   margin: 0 0 6px;
   text-align: center;
 }
-
 .login-sub {
   font-size: 13px;
   color: var(--text-secondary);
@@ -122,19 +133,49 @@ async function login() {
 }
 .btn-google:hover:not(:disabled) {
   border-color: #2563eb;
-  background: var(--bg-secondary);
   box-shadow: 0 2px 12px rgba(37, 99, 235, 0.15);
 }
-.btn-google:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.btn-google:disabled { opacity: 0.6; cursor: not-allowed; }
+.google-icon { width: 20px; height: 20px; flex-shrink: 0; }
+
+.divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
-.google-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
+.btn-guest {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
 }
+.btn-guest svg { width: 18px; height: 18px; flex-shrink: 0; }
+.btn-guest:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.btn-guest:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .login-error {
   color: var(--danger);
@@ -142,7 +183,6 @@ async function login() {
   margin-bottom: 12px;
   text-align: center;
 }
-
 .login-note {
   font-size: 11px;
   color: var(--text-secondary);

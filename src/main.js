@@ -51,24 +51,27 @@ function waitForSession(timeoutMs = 3000) {
   })
 }
 
+// Rotte accessibili solo con account (non agli ospiti)
+const AUTH_ONLY_ROUTES = ['map', 'fuel-prices']
+
 router.beforeEach(async (to) => {
   const { data: { session } } = await supabase.auth.getSession()
-  let auth = !!session
-  console.log('[router] navigazione verso:', to.name, '| auth:', auth)
+  let auth    = !!session
+  const guest = localStorage.getItem('storicar_guest') === '1'
+  console.log('[router] navigazione verso:', to.name, '| auth:', auth, '| guest:', guest)
 
   // Se non c'è sessione ma c'è un token in localStorage (OAuth appena completato),
   // aspettiamo un momento che Supabase inizializzi la sessione
-  if (!auth) {
+  if (!auth && !guest) {
     // Deriva il project ref dall'URL Supabase (già in env) invece di hardcodarlo
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || ''
-    const storageKey = 'sb-' + projectRef + '-auth-token'
+    const projectRef  = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || ''
+    const storageKey  = 'sb-' + projectRef + '-auth-token'
     const stored = localStorage.getItem(storageKey)
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
         if (parsed.access_token && parsed.expires_at > Math.floor(Date.now() / 1000)) {
-          // Token valido in localStorage, aspetta che Supabase lo carichi
           const sess = await waitForSession(2000)
           auth = !!sess
         }
@@ -76,8 +79,16 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.name !== 'login' && !auth) return { name: 'login' }
-  if (to.name === 'login' && auth) return { name: 'home' }
+  const hasAccess = auth || guest
+
+  // Non loggato e non ospite → login
+  if (to.name !== 'login' && !hasAccess) return { name: 'login' }
+
+  // Già loggato → non mostrare login
+  if (to.name === 'login' && hasAccess) return { name: 'home' }
+
+  // Le rotte AUTH_ONLY sono raggiungibili anche come guest,
+  // ma le viste mostrano un AuthWall che invita al login
 })
 
 const app = createApp(App)
