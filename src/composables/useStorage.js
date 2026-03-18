@@ -21,6 +21,9 @@ const defaultSettings = {
   fuelMapLng: null,
   fuelMapRadius: 10,
   username: '',
+  avatarUrl: null,
+  isPublic: false,
+  notificationsEnabled: false,
 }
 
 const emptyData = () => ({
@@ -118,8 +121,11 @@ function mapSettings(r) {
     appName:             r.app_name             ?? defaultSettings.appName,
     fuelMapLat:          r.fuel_map_lat         ?? null,
     fuelMapLng:          r.fuel_map_lng         ?? null,
-    fuelMapRadius:       r.fuel_map_radius      ?? defaultSettings.fuelMapRadius,
-    username:            r.username             ?? '',
+    fuelMapRadius:        r.fuel_map_radius       ?? defaultSettings.fuelMapRadius,
+    username:             r.username              ?? '',
+    avatarUrl:            r.avatar_url            ?? null,
+    isPublic:             r.is_public             ?? false,
+    notificationsEnabled: r.notifications_enabled ?? false,
   }
 }
 
@@ -322,10 +328,13 @@ async function persistSettings(s) {
     show_remaining_range:  s.showRemainingRange,
     notify_deadlines_days: s.notifyDeadlinesDays,
     app_name:              s.appName,
-    fuel_map_lat:          s.fuelMapLat  ?? null,
-    fuel_map_lng:          s.fuelMapLng  ?? null,
-    fuel_map_radius:       s.fuelMapRadius ?? 10,
-    username:              s.username    ?? '',
+    fuel_map_lat:           s.fuelMapLat            ?? null,
+    fuel_map_lng:           s.fuelMapLng            ?? null,
+    fuel_map_radius:        s.fuelMapRadius         ?? 10,
+    username:               s.username              ?? '',
+    avatar_url:             s.avatarUrl             ?? null,
+    is_public:              s.isPublic              ?? false,
+    notifications_enabled:  s.notificationsEnabled  ?? false,
   }, { onConflict: 'user_id' })
 }
 
