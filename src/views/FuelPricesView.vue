@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import L from 'leaflet'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { useStorage } from '../composables/useStorage'
 
 const { getSetting } = useStorage()
@@ -26,9 +29,24 @@ function getMapParams() {
 // Mappa
 const mapContainer = ref(null)
 let map            = null
-let markersLayer   = null
+let clusterLayer   = null
 let userMarker     = null
 const markers      = {}
+
+// ── GPS automatico se non c'è posizione salvata ────────────────────────────────
+async function getPosition() {
+  const { lat, lng } = getMapParams()
+  if (lat != null && lng != null) return { lat, lng }
+  // Nessuna posizione salvata: prova GPS
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
+    )
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  } catch {
+    return { lat: null, lng: null }
+  }
+}
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function load(refresh = false) {
@@ -36,7 +54,23 @@ async function load(refresh = false) {
   error.value   = null
   try {
     const base = import.meta.env.VITE_FUEL_PRICES_URL || './fuel-prices.php'
-    const { lat, lng, km } = getMapParams()
+    const { lat: settingsLat, lng: settingsLng, km } = getMapParams()
+
+    let lat = settingsLat
+    let lng = settingsLng
+
+    // Se non c'è posizione salvata, tenta GPS
+    if (lat == null || lng == null) {
+      const gps = await getPosition()
+      lat = gps.lat
+      lng = gps.lng
+      // Aggiorna marker utente se abbiamo GPS
+      if (lat != null) {
+        userLat.value = lat
+        userLng.value = lng
+      }
+    }
+
     const params = new URLSearchParams()
     if (lat != null) params.set('lat', lat)
     if (lng != null) params.set('lng', lng)
@@ -74,7 +108,6 @@ const carburanti = computed(() => data.value?.carburanti ?? ['Benzina', 'Gasolio
 const statsFuel  = computed(() => allStats.value[selectedFuel.value] ?? null)
 const mediaself  = computed(() => statsFuel.value?.self?.media ?? null)
 
-
 const selectedImp = computed(() =>
   selectedId.value ? impianti.value.find(i => i.id === selectedId.value) : null
 )
@@ -109,7 +142,7 @@ function switchFuel(fuel) {
   nextTick(() => updateMarkers())
 }
 
-// ── GPS ───────────────────────────────────────────────────────────────────────
+// ── GPS manuale ───────────────────────────────────────────────────────────────
 async function locateMe() {
   locating.value = true
   try {
@@ -136,13 +169,60 @@ async function locateMe() {
 function initMap() {
   if (!mapContainer.value || map) return
   const { lat, lng } = getMapParams()
-  const center = (lat != null && lng != null) ? [lat, lng] : [39.27, 9.09]
+  const center = (lat != null && lng != null)
+    ? [lat, lng]
+    : (userLat.value != null ? [userLat.value, userLng.value] : [41.90, 12.49])
   map = L.map(mapContainer.value, { zoomControl: true }).setView(center, 12)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
     maxZoom: 19,
   }).addTo(map)
-  markersLayer = L.layerGroup().addTo(map)
+
+  // Cluster layer con icona personalizzata che mostra il prezzo minimo
+  clusterLayer = L.markerClusterGroup({
+    maxClusterRadius: 50,
+    iconCreateFunction(cluster) {
+      const children = cluster.getAllChildMarkers()
+      // Trova il prezzo minimo self del carburante selezionato tra i figli
+      let minPrice = null
+      for (const m of children) {
+        const val = m._fuelSelfVal
+        if (val != null && (minPrice == null || val < minPrice)) minPrice = val
+      }
+      const count = cluster.getChildCount()
+      const color = minPrice != null ? prezzoColore(minPrice) : '#64748b'
+      const label = minPrice != null ? fmt(minPrice) : count
+      return L.divIcon({
+        className: '',
+        html: `<div style="
+          background:${color};
+          color:white;
+          font-weight:800;
+          border-radius:20px;
+          padding:5px 10px;
+          font-size:11px;
+          white-space:nowrap;
+          box-shadow:0 2px 8px rgba(0,0,0,.35);
+          border:2px solid white;
+          display:flex;
+          align-items:center;
+          gap:4px;
+        ">
+          <span style="opacity:.75;font-size:10px">${count}×</span>${label}
+        </div>`,
+        iconAnchor: [28, 14],
+      })
+    }
+  })
+  clusterLayer.addTo(map)
+
+  // Marker utente se GPS già rilevato
+  if (userLat.value != null) {
+    userMarker = L.circleMarker([userLat.value, userLng.value], {
+      radius: 9, fillColor: '#2563eb', color: 'white', weight: 2.5, fillOpacity: 1, zIndexOffset: 1000
+    }).bindTooltip('La tua posizione', { permanent: false }).addTo(map)
+  }
+
   updateMarkers()
 }
 
@@ -162,22 +242,27 @@ function makeIcon(imp) {
 }
 
 function updateMarkers() {
-  if (!markersLayer || !impianti.value.length) return
-  markersLayer.clearLayers()
+  if (!clusterLayer || !impianti.value.length) return
+  clusterLayer.clearLayers()
   Object.keys(markers).forEach(k => delete markers[k])
 
   impianti.value.forEach(imp => {
     if (!imp.lat || !imp.lng) return
     const marker = L.marker([imp.lat, imp.lng], { icon: makeIcon(imp) })
+    // Salva il prezzo self sull'oggetto marker per usarlo nel cluster icon
+    marker._fuelSelfVal = getSelf(imp)
     marker.on('click', () => selectImp(imp.id))
-    marker.addTo(markersLayer)
+    clusterLayer.addLayer(marker)
     markers[imp.id] = marker
   })
 }
 
 function refreshMarkerIcon(id) {
   const imp = impianti.value.find(i => i.id === id)
-  if (imp && markers[id]) markers[id].setIcon(makeIcon(imp))
+  if (imp && markers[id]) {
+    markers[id]._fuelSelfVal = getSelf(imp)
+    markers[id].setIcon(makeIcon(imp))
+  }
 }
 
 function selectImp(id) {
