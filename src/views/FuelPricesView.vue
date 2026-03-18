@@ -5,8 +5,11 @@ import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { useStorage } from '../composables/useStorage'
+import { useAuth } from '../composables/useAuth'
+import AuthWall from '../components/AuthWall.vue'
 
 const { getSetting } = useStorage()
+const { isGuest } = useAuth()
 
 // ── Stato ─────────────────────────────────────────────────────────────────────
 const loading      = ref(false)
@@ -294,6 +297,16 @@ watch(selectedId, (newId, oldId) => {
 <template>
   <div class="prices-view">
 
+    <!-- Auth wall per ospiti -->
+    <AuthWall
+      v-if="isGuest"
+      title="Prezzi carburante"
+      description="Visualizza i prezzi aggiornati dei distributori nella tua zona. Richiede un account."
+      feature-name="i prezzi carburante in tempo reale"
+      icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+    />
+
+    <template v-if="!isGuest">
     <!-- Barra in alto: GPS + refresh + meta -->
     <div class="top-bar">
       <div class="top-meta">
@@ -405,6 +418,7 @@ watch(selectedId, (newId, oldId) => {
       </div>
     </div>
 
+    </template><!-- /v-if="!isGuest" -->
   </div>
 </template>
 

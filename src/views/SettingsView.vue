@@ -2,8 +2,50 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
+import { useAuth } from '../composables/useAuth'
 
 const router = useRouter()
+const { user, isGuest, signInWithGoogle, signOut } = useAuth()
+
+// ── Profilo ──────────────────────────────────────────────────
+const avatarUrl = computed(() =>
+  user.value?.user_metadata?.avatar_url ||
+  user.value?.user_metadata?.picture    ||
+  null
+)
+const userEmail    = computed(() => user.value?.email || '')
+const editingName  = ref(false)
+const nameInput    = ref('')
+
+function startEditName() {
+  nameInput.value = data.value.settings.username || userEmail.value.split('@')[0] || 'Ospite'
+  editingName.value = true
+}
+
+async function saveName() {
+  const val = nameInput.value.trim()
+  if (val) await setSetting('username', val)
+  editingName.value = false
+}
+
+function cancelEditName() {
+  editingName.value = false
+}
+
+const displayName = computed(() => {
+  if (data.value.settings.username) return data.value.settings.username
+  if (isGuest.value) return 'Ospite'
+  return userEmail.value.split('@')[0] || 'Utente'
+})
+
+async function handleSignOut() {
+  await signOut()
+  router.push('/login')
+}
+
+async function loginWithGoogle() {
+  await signInWithGoogle()
+}
 const {
   data,
   setTheme,
@@ -135,6 +177,115 @@ async function resetData() {
 
 <template>
   <div class="settings-view">
+
+    <!-- ── Profilo ── -->
+    <div class="profile-card">
+      <!-- Avatar -->
+      <div class="profile-avatar-wrap">
+        <img v-if="avatarUrl && !isGuest" :src="avatarUrl" class="profile-avatar" alt="Avatar" referrerpolicy="no-referrer"/>
+        <div v-else class="profile-avatar-placeholder">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+        </div>
+        <span v-if="isGuest" class="profile-guest-badge">Ospite</span>
+      </div>
+
+      <!-- Info -->
+      <div class="profile-info">
+        <!-- Username modificabile inline -->
+        <div class="profile-name-row">
+          <template v-if="!editingName">
+            <span class="profile-name">{{ displayName }}</span>
+            <button class="btn-edit-name" @click="startEditName" title="Modifica nome">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+              </svg>
+            </button>
+          </template>
+          <template v-else>
+            <input
+              v-model="nameInput"
+              class="profile-name-input"
+              placeholder="Il tuo nome"
+              maxlength="30"
+              @keyup.enter="saveName"
+              @keyup.escape="cancelEditName"
+              autofocus
+            />
+            <button class="btn-name-ok" @click="saveName">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+              </svg>
+            </button>
+            <button class="btn-name-cancel" @click="cancelEditName">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </template>
+        </div>
+
+        <div v-if="!isGuest" class="profile-email">{{ userEmail }}</div>
+        <div v-else class="profile-guest-note">Accedi per sincronizzare i dati</div>
+      </div>
+
+      <!-- Veicoli dell'utente -->
+      <div v-if="data.vehicles.length" class="profile-vehicles">
+        <div class="profile-vehicles-title">I tuoi veicoli</div>
+        <div class="profile-vehicle-list">
+          <div
+            v-for="v in data.vehicles.slice(0, 3)"
+            :key="v.id"
+            class="profile-vehicle-chip"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
+            </svg>
+            {{ v.name }}
+          </div>
+          <button v-if="data.vehicles.length > 3" class="profile-vehicle-more" @click="router.push('/vehicles')">
+            +{{ data.vehicles.length - 3 }} altri
+          </button>
+          <button class="profile-vehicle-add" @click="router.push('/vehicles')">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div v-else class="profile-no-vehicles">
+        <button class="btn-add-vehicle" @click="router.push('/vehicles')">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Aggiungi veicolo
+        </button>
+      </div>
+
+      <!-- Azioni profilo -->
+      <div class="profile-actions">
+        <button v-if="isGuest" class="btn-profile-login" @click="loginWithGoogle">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px;flex-shrink:0">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Accedi con Google
+        </button>
+        <button v-else class="btn-profile-logout" @click="handleSignOut">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
+          Esci dall'account
+        </button>
+      </div>
+    </div>
 
     <!-- ── App identity ── -->
     <div class="app-hero">
@@ -489,6 +640,273 @@ async function resetData() {
 .settings-view {
   padding-bottom: 16px;
 }
+
+/* ── Profilo ── */
+.profile-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Avatar */
+.profile-avatar-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto;
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--primary);
+  display: block;
+}
+
+.profile-avatar-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 3px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.profile-avatar-placeholder svg {
+  width: 36px;
+  height: 36px;
+  color: var(--text-secondary);
+}
+
+.profile-guest-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: var(--primary);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+}
+
+/* Info */
+.profile-info {
+  text-align: center;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-edit-name {
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.btn-edit-name svg { width: 14px; height: 14px; }
+.btn-edit-name:hover { background: var(--primary-glow); color: var(--primary); }
+
+.profile-name-input {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--primary);
+  border-radius: 10px;
+  padding: 5px 10px;
+  text-align: center;
+  width: 160px;
+  outline: none;
+}
+
+.btn-name-ok, .btn-name-cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.btn-name-ok svg { width: 16px; height: 16px; color: var(--success); }
+.btn-name-cancel svg { width: 16px; height: 16px; color: var(--danger); }
+.btn-name-ok:hover { background: rgba(16,185,129,0.1); }
+.btn-name-cancel:hover { background: rgba(239,68,68,0.1); }
+
+.profile-email {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.profile-guest-note {
+  font-size: 12px;
+  color: var(--primary);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Veicoli */
+.profile-vehicles {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.profile-vehicles-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.profile-vehicle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.profile-vehicle-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.profile-vehicle-chip svg { width: 14px; height: 14px; color: var(--text-secondary); flex-shrink: 0; }
+
+.profile-vehicle-more {
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.profile-vehicle-more:hover { color: var(--primary); border-color: var(--primary); }
+
+.profile-vehicle-add {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--primary-glow);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.profile-vehicle-add svg { width: 16px; height: 16px; }
+.profile-vehicle-add:hover { background: var(--primary); color: white; }
+
+.profile-no-vehicles {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.btn-add-vehicle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+}
+.btn-add-vehicle svg { width: 16px; height: 16px; }
+.btn-add-vehicle:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-glow); }
+
+/* Azioni profilo */
+.profile-actions {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.btn-profile-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.06);
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.btn-profile-logout svg { width: 16px; height: 16px; }
+.btn-profile-logout:hover { background: rgba(239,68,68,0.12); }
+
+.btn-profile-login {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.btn-profile-login:hover { border-color: #2563eb; box-shadow: 0 2px 12px rgba(37,99,235,0.15); }
 
 /* ── App hero ── */
 .app-hero {
