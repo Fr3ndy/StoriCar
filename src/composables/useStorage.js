@@ -136,7 +136,7 @@ async function loadData() {
   dataReady.value = false
   loadingPromise = (async () => {
     try {
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT 10s')), 10000))
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT 8s')), 8000))
       const fetches = Promise.all([
         supabase.from('vehicles').select('*').order('created_at', { ascending: true }),
         supabase.from('fuel_records').select('*').order('date', { ascending: false }),
@@ -271,21 +271,17 @@ async function migrateGuestData(userId) {
 }
 
 // ── Inizializzazione ─────────────────────────────────────────
-supabase.auth.getSession().then(({ data: { session } }) => {
-  console.log('[useStorage] getSession -', session?.user?.email ?? 'nessuna sessione')
-  if (session?.user) {
-    loadData()
-  } else if (localStorage.getItem('storicar_guest') === '1') {
-    data.value      = loadLocalData()
-    dataReady.value = true
-  } else {
-    dataReady.value = true
-  }
-})
-
+//
+// ATTENZIONE: non usare getSession() qui come entry point.
+// Supabase spara SIGNED_IN *prima* che il JWT sia stato refreshato,
+// quindi le query falliscono o vanno in timeout. L'evento corretto è
+// INITIAL_SESSION, che scatta solo quando la sessione è completamente
+// pronta (token valido, cookie scritto). Vedi: supabase-js docs §auth-events
+//
 supabase.auth.onAuthStateChange(async (_event, session) => {
   console.log('[useStorage] onAuthStateChange - evento:', _event, '| utente:', session?.user?.email ?? 'null')
 
+  // ── Logout: pulizia completa ──────────────────────────────
   if (_event === 'SIGNED_OUT') {
     data.value      = emptyData()
     dataReady.value = false
@@ -293,15 +289,28 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
     return
   }
 
-  if (session?.user && (_event === 'INITIAL_SESSION' || _event === 'SIGNED_IN')) {
+  // ── INITIAL_SESSION: unico punto di caricamento dati ─────
+  // Questo evento è garantito da Supabase esattamente una volta per
+  // page-load, DOPO che il token è stato validato/refreshato.
+  // SIGNED_IN può arrivare prima (sessione ancora in fase di refresh)
+  // e viene ignorato intenzionalmente: in questa app il login usa
+  // OAuth redirect → full page reload → INITIAL_SESSION sparerà
+  // sempre con la sessione completa. TOKEN_REFRESHED non richiede
+  // reload dei dati.
+  if (_event !== 'INITIAL_SESSION') return
+
+  if (session?.user) {
     const hasGuestData = !!localStorage.getItem(LOCAL_DATA_KEY)
     if (hasGuestData) {
-      loadingPromise = null
       await migrateGuestData(session.user.id)
-    } else if (!dataReady.value) {
-      loadingPromise = null
+    } else {
       await loadData()
     }
+  } else if (localStorage.getItem('storicar_guest') === '1') {
+    data.value      = loadLocalData()
+    dataReady.value = true
+  } else {
+    dataReady.value = true
   }
 })
 
