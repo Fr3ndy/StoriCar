@@ -1,16 +1,16 @@
-name: Deploy to GitHub Pages (main)
+name: Deploy to GitHub Pages (develop)
 
 on:
   push:
     branches:
-      - main
+      - develop
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: pages-main
+  group: pages-develop
   cancel-in-progress: true
 
 jobs:
@@ -31,17 +31,17 @@ jobs:
 
       - name: Build
         env:
-          VITE_BASE_URL: /StoriCar/
+          VITE_BASE_URL: /StoriCar/dev/
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
           VITE_FUEL_PRICES_URL: ${{ secrets.VITE_FUEL_PRICES_URL }}
         run: npm run build
 
-      - name: Deploy to gh-pages (root)
+      - name: Deploy to gh-pages (dev subfolder)
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          destination_dir: .
+          destination_dir: dev
           keep_files: true
