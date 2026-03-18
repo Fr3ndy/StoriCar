@@ -14,14 +14,14 @@ const vehicles = computed(() => data.value.vehicles)
 
 const categories = [
   { value: 'maintenance', label: 'Manutenzione' },
-  { value: 'insurance', label: 'Assicurazione' },
-  { value: 'tax', label: 'Bollo' },
-  { value: 'tires', label: 'Gomme' },
-  { value: 'wash', label: 'Lavaggio' },
-  { value: 'parking', label: 'Parcheggio' },
-  { value: 'toll', label: 'Pedaggi' },
-  { value: 'fine', label: 'Multe' },
-  { value: 'other', label: 'Altro' }
+  { value: 'insurance',   label: 'Assicurazione' },
+  { value: 'tax',         label: 'Bollo' },
+  { value: 'tires',       label: 'Gomme' },
+  { value: 'wash',        label: 'Lavaggio' },
+  { value: 'parking',     label: 'Parcheggio' },
+  { value: 'toll',        label: 'Pedaggi' },
+  { value: 'fine',        label: 'Multe' },
+  { value: 'other',       label: 'Altro' }
 ]
 
 const form = ref({
@@ -67,108 +67,105 @@ async function save() {
     description: form.value.description,
     notes: form.value.notes
   }
-
   if (isEditing.value) {
     await updateExpense(editId.value, expenseData)
   } else {
     await addExpense(expenseData)
   }
-
   router.push('/expenses')
 }
 
-const canSave = computed(() => {
-  return form.value.vehicleId && form.value.date && form.value.amount
-})
+const canSave = computed(() => form.value.vehicleId && form.value.date && form.value.amount)
 </script>
 
 <template>
-  <div class="expense-add">
-    <div class="card">
-      <!-- Vehicle selector -->
+  <div class="view-container">
+    <div class="card form-card">
+
       <div class="form-group">
         <label class="form-label">Veicolo *</label>
         <select v-model="form.vehicleId" class="form-select">
           <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.name }} {{ v.plate ? `(${v.plate})` : '' }}
+            {{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
           </option>
         </select>
       </div>
 
-      <!-- Date -->
-      <div class="form-group">
-        <label class="form-label">Data *</label>
-        <input
-          v-model="form.date"
-          type="date"
-          class="form-input"
-          required
-        />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input v-model="form.date" type="date" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo (€) *</label>
+          <input
+            v-model="form.amount"
+            type="number"
+            step="0.01"
+            min="0"
+            class="form-input"
+            placeholder="100.00"
+            required
+          />
+        </div>
       </div>
 
-      <!-- Category -->
       <div class="form-group">
         <label class="form-label">Categoria *</label>
         <select v-model="form.category" class="form-select">
-          <option v-for="cat in categories" :key="cat.value" :value="cat.value">
-            {{ cat.label }}
-          </option>
+          <option v-for="cat in categories" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
         </select>
       </div>
 
-      <!-- Amount -->
-      <div class="form-group">
-        <label class="form-label">Importo (€) *</label>
-        <input
-          v-model="form.amount"
-          type="number"
-          step="0.01"
-          min="0"
-          class="form-input"
-          placeholder="100.00"
-          required
-        />
-      </div>
-
-      <!-- Description -->
       <div class="form-group">
         <label class="form-label">Descrizione</label>
         <input
           v-model="form.description"
           type="text"
           class="form-input"
-          placeholder="es. Cambio olio, Revisione..."
+          placeholder="es. Cambio olio, Revisione…"
         />
       </div>
 
-      <!-- Notes -->
       <div class="form-group">
         <label class="form-label">Note</label>
-        <textarea
-          v-model="form.notes"
-          class="form-input"
-          rows="2"
-          placeholder="Note opzionali..."
-        ></textarea>
+        <textarea v-model="form.notes" class="form-input" rows="2" placeholder="Note opzionali…"></textarea>
       </div>
 
-      <!-- Actions -->
       <div class="form-actions">
         <button class="btn btn-secondary" @click="router.back()">Annulla</button>
         <button class="btn btn-primary" @click="save" :disabled="!canSave">
-          {{ isEditing ? 'Salva' : 'Aggiungi' }}
+          {{ isEditing ? 'Salva modifiche' : 'Aggiungi' }}
         </button>
       </div>
+
     </div>
   </div>
 </template>
 
 <style scoped>
+.view-container {
+  padding: 16px;
+  padding-bottom: 40px;
+}
+
+.form-card {
+  padding: 20px 16px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 .form-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 textarea.form-input {

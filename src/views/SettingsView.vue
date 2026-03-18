@@ -883,7 +883,8 @@ async function resetData() {
 
 <style scoped>
 .settings-view {
-  padding-bottom: 16px;
+  padding: 16px;
+  padding-bottom: 100px;
 }
 
 /* ── Profilo ── */

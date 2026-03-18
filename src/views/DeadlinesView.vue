@@ -56,12 +56,12 @@ watch(dataReady, (ready) => {
 }, { immediate: true })
 
 const deadlineTypes = [
-  { value: 'assicurazione', label: 'Assicurazione', icon: '🛡️', badgeClass: 'badge-insurance' },
-  { value: 'bollo', label: 'Bollo', icon: '📄', badgeClass: 'badge-tax' },
-  { value: 'tagliando', label: 'Tagliando', icon: '🔧', badgeClass: 'badge-maintenance' },
-  { value: 'revisione', label: 'Revisione', icon: '🔍', badgeClass: 'badge-maintenance' },
-  { value: 'gomme', label: 'Cambio Gomme', icon: '⚙️', badgeClass: 'badge-other' },
-  { value: 'altro', label: 'Altro', icon: '📌', badgeClass: 'badge-other' }
+  { value: 'assicurazione', label: 'Assicurazione', icon: '🛡️' },
+  { value: 'bollo',         label: 'Bollo',         icon: '📄' },
+  { value: 'tagliando',     label: 'Tagliando',     icon: '🔧' },
+  { value: 'revisione',     label: 'Revisione',     icon: '🔍' },
+  { value: 'gomme',         label: 'Cambio Gomme',  icon: '⚙️' },
+  { value: 'altro',         label: 'Altro',         icon: '📌' }
 ]
 
 const showForm = ref(false)
@@ -82,10 +82,8 @@ const deadlines = computed(() => {
 
 function daysUntil(dateStr) {
   if (!dateStr) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const expiry = new Date(dateStr)
-  expiry.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0,0,0,0)
+  const expiry = new Date(dateStr); expiry.setHours(0,0,0,0)
   return Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
 }
 
@@ -113,14 +111,7 @@ function onVehicleChange(e) {
 
 function openAddForm() {
   editingId.value = null
-  form.value = {
-    type: 'assicurazione',
-    description: '',
-    expiryDate: '',
-    amount: '',
-    reminderDays: 30,
-    notes: ''
-  }
+  form.value = { type: 'assicurazione', description: '', expiryDate: '', amount: '', reminderDays: 30, notes: '' }
   showForm.value = true
 }
 
@@ -163,22 +154,14 @@ function confirmDelete(deadline) {
 }
 
 function getTypeInfo(typeValue) {
-  return deadlineTypes.find(t => t.value === typeValue) || { label: typeValue, icon: '📌', badgeClass: 'badge-other' }
+  return deadlineTypes.find(t => t.value === typeValue) || { label: typeValue, icon: '📌' }
 }
 
 const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
 </script>
 
 <template>
-  <div class="deadlines">
-    <!-- Vehicle selector -->
-    <div v-if="vehicles.length > 0" class="vehicle-selector">
-      <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
-        <option v-for="v in vehicles" :key="v.id" :value="v.id">
-          {{ v.name }} {{ v.plate ? `(${v.plate})` : '' }}
-        </option>
-      </select>
-    </div>
+  <div class="view-container">
 
     <!-- No vehicles -->
     <div v-if="vehicles.length === 0" class="empty-state">
@@ -187,14 +170,12 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
       </svg>
       <h2>Nessun veicolo</h2>
       <p>Aggiungi prima un veicolo</p>
-      <button class="btn btn-primary mt-16" @click="router.push('/vehicles')">Aggiungi Veicolo</button>
+      <button class="btn btn-primary" style="margin-top:16px" @click="router.push('/vehicles')">Aggiungi Veicolo</button>
     </div>
 
-    <!-- Form -->
-    <div v-else-if="showForm" class="card">
-      <h3 class="card-title" style="margin-bottom: 16px;">
-        {{ editingId ? 'Modifica Scadenza' : 'Nuova Scadenza' }}
-      </h3>
+    <!-- Form: add/edit deadline -->
+    <div v-else-if="showForm" class="card form-card">
+      <h3 class="form-title">{{ editingId ? 'Modifica Scadenza' : 'Nuova Scadenza' }}</h3>
 
       <div class="form-group">
         <label class="form-label">Tipo</label>
@@ -217,14 +198,15 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
         <input v-model="form.expiryDate" type="date" class="form-input" required />
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Importo (€)</label>
-        <input v-model="form.amount" type="number" class="form-input" placeholder="es. 450" min="0" step="0.01" />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Avviso (giorni prima)</label>
-        <input v-model="form.reminderDays" type="number" class="form-input" min="1" max="365" />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Importo (€)</label>
+          <input v-model="form.amount" type="number" class="form-input" placeholder="es. 450" min="0" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Avviso (giorni prima)</label>
+          <input v-model="form.reminderDays" type="number" class="form-input" min="1" max="365" />
+        </div>
       </div>
 
       <div class="form-group">
@@ -240,28 +222,37 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
       <div class="form-actions">
         <button class="btn btn-secondary" @click="showForm = false">Annulla</button>
         <button class="btn btn-primary" @click="saveDeadline" :disabled="!canSave">
-          {{ editingId ? 'Salva' : 'Aggiungi' }}
+          {{ editingId ? 'Salva modifiche' : 'Aggiungi' }}
         </button>
       </div>
     </div>
 
     <!-- List -->
-    <div v-else>
-      <!-- Notifiche toggle -->
+    <template v-else>
+      <!-- Vehicle selector -->
+      <div style="margin-bottom:12px">
+        <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
+          <option v-for="v in vehicles" :key="v.id" :value="v.id">
+            {{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Notifications toggle -->
       <div v-if="notifSupported" class="notif-bar" :class="{ enabled: notifEnabled }">
-        <div class="notif-bar-left">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="notif-left">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="notif-icon">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
           </svg>
           <span>Notifiche scadenze</span>
-          <span v-if="!notifSupported" class="notif-unsupported">non supportate</span>
         </div>
-        <button class="toggle-switch" :class="{ on: notifEnabled }" @click="toggleNotifiche">
+        <button class="toggle" :class="{ on: notifEnabled }" @click="toggleNotifiche">
           <span class="toggle-thumb"></span>
         </button>
       </div>
 
-      <div v-if="deadlines.length === 0" class="empty-state" style="padding: 40px 0;">
+      <!-- Empty -->
+      <div v-if="deadlines.length === 0" class="empty-state" style="padding-top:32px">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
@@ -269,31 +260,38 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
         <p>Aggiungi assicurazione, bollo o manutenzione</p>
       </div>
 
-      <div v-for="dl in deadlines" :key="dl.id" class="card deadline-card" :class="statusClass(dl)">
-        <div class="deadline-header">
-          <div class="deadline-left">
-            <span class="deadline-icon">{{ getTypeInfo(dl.type).icon }}</span>
+      <!-- Deadline cards -->
+      <div v-for="dl in deadlines" :key="dl.id" class="deadline-card card" :class="statusClass(dl)">
+        <div class="dl-header">
+          <div class="dl-left">
+            <span class="dl-icon">{{ getTypeInfo(dl.type).icon }}</span>
             <div>
-              <div class="deadline-title">
-                <span class="badge" :class="getTypeInfo(dl.type).badgeClass">{{ getTypeInfo(dl.type).label }}</span>
-                <span v-if="dl.description" class="deadline-desc">{{ dl.description }}</span>
+              <div class="dl-title">
+                <span class="dl-type">{{ getTypeInfo(dl.type).label }}</span>
+                <span v-if="dl.description" class="dl-desc">{{ dl.description }}</span>
               </div>
-              <div class="deadline-date">
+              <div class="dl-date">
                 {{ new Date(dl.expiryDate).toLocaleDateString('it-IT') }}
                 <span v-if="dl.amount"> · {{ dl.amount.toLocaleString('it-IT', { minimumFractionDigits: 2 }) }} €</span>
               </div>
             </div>
           </div>
-          <div class="deadline-status" :class="statusClass(dl)">
-            {{ statusLabel(dl) }}
-          </div>
+          <div class="dl-status" :class="statusClass(dl)">{{ statusLabel(dl) }}</div>
         </div>
 
-        <div v-if="dl.notes" class="deadline-notes">{{ dl.notes }}</div>
+        <div v-if="dl.notes" class="dl-notes">{{ dl.notes }}</div>
 
-        <div class="deadline-actions">
-          <button class="btn btn-sm btn-secondary" @click="openEditForm(dl)">Modifica</button>
-          <button class="btn btn-sm btn-danger" @click="confirmDelete(dl)">Elimina</button>
+        <div class="dl-actions">
+          <button class="action-btn" @click="openEditForm(dl)" title="Modifica">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button class="action-btn danger" @click="confirmDelete(dl)" title="Elimina">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -302,36 +300,63 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
         </svg>
       </button>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
+.view-container {
+  padding: 16px;
+  padding-bottom: 100px;
 }
 
+/* Form */
+.form-card {
+  padding: 20px 16px;
+}
+
+.form-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* Type chips */
 .type-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
 }
 
 .type-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 7px 12px;
   border-radius: 20px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s;
 }
 
 .type-chip.active {
@@ -340,133 +365,26 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
   border-color: var(--primary);
 }
 
-.deadline-card {
-  border-left: 4px solid var(--border);
-}
-
-.deadline-card.expiring {
-  border-left-color: var(--warning);
-}
-
-.deadline-card.expired {
-  border-left-color: var(--danger);
-}
-
-.deadline-card.ok {
-  border-left-color: var(--success);
-}
-
-.deadline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.deadline-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-}
-
-.deadline-icon {
-  font-size: 22px;
-  line-height: 1;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.deadline-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.deadline-desc {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.deadline-date {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-
-.deadline-status {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 12px;
-  white-space: nowrap;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.deadline-status.expiring {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.deadline-status.expired {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.deadline-status.ok {
-  background: #d1fae5;
-  color: #047857;
-}
-
-[data-theme="dark"] .deadline-status.expiring {
-  background: #451a03;
-  color: #fcd34d;
-}
-
-[data-theme="dark"] .deadline-status.expired {
-  background: #450a0a;
-  color: #fca5a5;
-}
-
-[data-theme="dark"] .deadline-status.ok {
-  background: #064e3b;
-  color: #6ee7b7;
-}
-
-.deadline-notes {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-top: 8px;
-  padding: 6px 8px;
-  background: var(--bg-secondary);
-  border-radius: 6px;
-}
-
-.deadline-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-/* Notifiche bar */
+/* Notif bar */
 .notif-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 12px 14px;
   background: var(--bg-card);
   border: 1.5px solid var(--border);
   border-radius: 14px;
   margin-bottom: 12px;
   gap: 12px;
+  transition: all 0.18s;
 }
+
 .notif-bar.enabled {
-  border-color: #2563eb;
-  background: rgba(37, 99, 235, 0.05);
+  border-color: var(--primary);
+  background: rgba(37,99,235,0.05);
 }
-.notif-bar-left {
+
+.notif-left {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -474,12 +392,18 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
   font-weight: 500;
   color: var(--text-primary);
 }
-.notif-bar-left svg { width: 18px; height: 18px; color: #2563eb; flex-shrink: 0; }
-.notif-unsupported { font-size: 11px; color: var(--text-secondary); }
 
-/* Toggle switch */
-.toggle-switch {
-  width: 44px; height: 24px;
+.notif-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* Toggle */
+.toggle {
+  width: 44px;
+  height: 24px;
   border-radius: 12px;
   background: var(--border);
   border: none;
@@ -489,15 +413,145 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
   flex-shrink: 0;
   padding: 0;
 }
-.toggle-switch.on { background: #2563eb; }
+
+.toggle.on { background: var(--primary); }
+
 .toggle-thumb {
   position: absolute;
-  top: 3px; left: 3px;
-  width: 18px; height: 18px;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: white;
   transition: transform 0.2s;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
-.toggle-switch.on .toggle-thumb { transform: translateX(20px); }
+
+.toggle.on .toggle-thumb { transform: translateX(20px); }
+
+/* Deadline card */
+.deadline-card {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-left: 4px solid var(--border);
+  transition: border-color 0.18s;
+}
+
+.deadline-card.expiring { border-left-color: var(--warning); }
+.deadline-card.expired  { border-left-color: var(--danger); }
+.deadline-card.ok       { border-left-color: var(--success); }
+
+.dl-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dl-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+}
+
+.dl-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.dl-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.dl-type {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dl-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.dl-date {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.dl-status {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.dl-status.expiring {
+  background: rgba(245,158,11,0.12);
+  color: #b45309;
+}
+
+.dl-status.expired {
+  background: rgba(239,68,68,0.12);
+  color: #b91c1c;
+}
+
+.dl-status.ok {
+  background: rgba(16,185,129,0.12);
+  color: #047857;
+}
+
+[data-theme="dark"] .dl-status.expiring { background: rgba(245,158,11,0.15); color: #fcd34d; }
+[data-theme="dark"] .dl-status.expired  { background: rgba(239,68,68,0.15);  color: #fca5a5; }
+[data-theme="dark"] .dl-status.ok       { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+
+.dl-notes {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-style: italic;
+}
+
+.dl-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-btn svg { width: 15px; height: 15px; }
+.action-btn:active { transform: scale(0.9); }
+.action-btn.danger { color: var(--danger); }
+.action-btn.danger:active { background: rgba(239,68,68,0.1); }
 </style>

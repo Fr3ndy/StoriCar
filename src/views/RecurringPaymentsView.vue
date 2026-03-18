@@ -394,6 +394,11 @@ function isExpired(p) {
 </template>
 
 <style scoped>
+/* Root container */
+.rp-view {
+  padding-bottom: 100px;
+}
+
 /* Summary */
 .summary-row {
   display: grid;
