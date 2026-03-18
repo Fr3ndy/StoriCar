@@ -1,6 +1,7 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
+// Sicurezza: non esporre mai errori PHP in produzione
+ini_set('display_errors', 0);
+error_reporting(0);
 /**
  * fuel-prices.php
  * Prezzi benzina via API carburanti.mise.gov.it
@@ -16,6 +17,7 @@ header('Access-Control-Allow-Methods: GET');
 
 define('CACHE_DIR', __DIR__ . '/cache');
 define('CACHE_TTL', 3600); // 1 ora
+define('REFRESH_COOLDOWN', 300); // Cooldown tra refresh forzati: 5 minuti
 
 define('API_URL', 'https://carburanti.mise.gov.it/ospzApi/search/zone');
 
@@ -62,9 +64,9 @@ function callApi(float $lat, float $lng, int $km): ?array {
             CURLOPT_POSTFIELDS     => $payload,
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_FOLLOWLOCATION => true,
-            // In produzione sarebbe meglio lasciare true e configurare CA bundle
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => false,
+            // Verifica SSL abilitata per prevenire attacchi MITM
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/json',
                 'Origin: https://carburanti.mise.gov.it',
@@ -88,8 +90,9 @@ function callApi(float $lat, float $lng, int $km): ?array {
                 'timeout' => 30,
             ],
             'ssl' => [
-                'verify_peer'      => false,
-                'verify_peer_name' => false,
+                // Verifica SSL abilitata per prevenire attacchi MITM
+                'verify_peer'      => true,
+                'verify_peer_name' => true,
             ],
         ]);
         $raw = @file_get_contents(API_URL, false, $ctx);
@@ -117,6 +120,11 @@ function loadImpianti(array $FUEL_NAMES, float $lat, float $lng, int $km): array
     ensureCacheDir();
     $forceRefresh = isset($_GET['refresh']) && $_GET['refresh'] === '1';
     $cacheFile    = cacheFile($lat, $lng, $km);
+
+    // Rate limiting sul refresh forzato: non più di 1 volta ogni REFRESH_COOLDOWN secondi
+    if ($forceRefresh && file_exists($cacheFile) && (time() - filemtime($cacheFile)) < REFRESH_COOLDOWN) {
+        $forceRefresh = false; // silenziosamente ignora, usa la cache
+    }
 
     if (!$forceRefresh && cacheIsValid($cacheFile)) {
         $cached = json_decode(@file_get_contents($cacheFile), true);

@@ -8,6 +8,7 @@ export default defineConfig({
     minify: 'esbuild'
   },
   esbuild: {
+    // TODO: quando si va in produzione reale, cambiare in drop: ['console', 'debugger']
     drop: []
   },
   plugins: [

@@ -59,7 +59,9 @@ router.beforeEach(async (to) => {
   // Se non c'è sessione ma c'è un token in localStorage (OAuth appena completato),
   // aspettiamo un momento che Supabase inizializzi la sessione
   if (!auth) {
-    const projectRef = 'spcbihreqyzldrwxbsru'
+    // Deriva il project ref dall'URL Supabase (già in env) invece di hardcodarlo
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || ''
     const storageKey = 'sb-' + projectRef + '-auth-token'
     const stored = localStorage.getItem(storageKey)
     if (stored) {
