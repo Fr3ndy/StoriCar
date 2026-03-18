@@ -3,15 +3,22 @@ import { onMounted, computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useStorage } from './composables/useStorage'
 import { useAuth } from './composables/useAuth'
+import { useNotifications } from './composables/useNotifications'
 
 const router = useRouter()
 const route = useRoute()
 const { getTheme, setTheme, data, dataReady } = useStorage()
 console.log('[App] setup - dataReady iniziale:', dataReady.value)
 const { user, signOut } = useAuth()
+const { checkDeadlines } = useNotifications()
 
 const currentTheme = computed(() => data.value.settings.theme)
 const menuOpen = ref(false)
+
+// Offline detection
+const isOffline = ref(!navigator.onLine)
+window.addEventListener('online',  () => { isOffline.value = false })
+window.addEventListener('offline', () => { isOffline.value = true  })
 
 function toggleTheme() {
   const newTheme = currentTheme.value === 'light' ? 'dark' : 'light'
@@ -58,15 +65,33 @@ watch(dataReady, (val) => {
   console.log('[App] dataReady cambiato:', val)
 })
 
+// Vero quando la route non deve mostrare header/nav (es. pagine pubbliche)
+const isShell = computed(() => route.name !== 'login' && route.name !== 'public-profile')
+
 onMounted(() => {
   setTheme(getTheme())
   console.log('[App] onMounted - dataReady:', dataReady.value)
+
+  // Controlla scadenze imminenti (se notifiche abilitate)
+  watch(dataReady, (ready) => {
+    if (!ready) return
+    const notifyDays = data.value.settings.notifyDeadlinesDays ?? 30
+    checkDeadlines(data.value.deadlines || [], notifyDays, data.value.vehicles || [])
+  }, { immediate: true })
+
+  // Ri-controlla quando l'app torna in foreground
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && dataReady.value) {
+      const notifyDays = data.value.settings.notifyDeadlinesDays ?? 30
+      checkDeadlines(data.value.deadlines || [], notifyDays, data.value.vehicles || [])
+    }
+  })
 })
 </script>
 
 <template>
   <div class="app">
-    <header v-if="route.name !== 'login'" class="header">
+    <header v-if="isShell" class="header">
       <div class="header-left">
         <h1>{{ pageTitle }}</h1>
       </div>
@@ -80,8 +105,19 @@ onMounted(() => {
       </button>
     </header>
 
+    <!-- Offline banner -->
+    <Transition name="banner">
+      <div v-if="isOffline" class="offline-banner">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M12 12h.01M3 3l18 18"/>
+        </svg>
+        <span>Sei offline — i dati potrebbero non essere aggiornati</span>
+      </div>
+    </Transition>
+
     <!-- Beta banner -->
-    <div v-if="route.name !== 'login'" class="beta-banner">
+    <div v-if="isShell" class="beta-banner">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
       </svg>
@@ -96,7 +132,7 @@ onMounted(() => {
     </main>
 
     <!-- Bottom nav -->
-    <nav v-if="route.name !== 'login'" class="bottom-nav">
+    <nav v-if="isShell" class="bottom-nav">
       <router-link to="/" class="nav-item" :class="{ active: route.name === 'home' }">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -133,7 +169,7 @@ onMounted(() => {
       </button>
     </nav>
 
-    <!-- More menu drawer -->
+    <!-- More menu drawer (only when shell is shown) -->
     <Transition name="overlay">
       <div v-if="menuOpen" class="drawer-overlay" @click="closeMenu" />
     </Transition>
@@ -424,6 +460,31 @@ onMounted(() => {
 }
 .btn-logout svg { width: 16px; height: 16px; }
 .btn-logout:hover { background: rgba(239, 68, 68, 0.08); }
+
+/* Offline banner */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fef3c7;
+  border-bottom: 1px solid #fcd34d;
+  font-size: 12px;
+  color: #78350f;
+  line-height: 1.4;
+  font-weight: 500;
+}
+.offline-banner svg { width: 15px; height: 15px; flex-shrink: 0; color: #d97706; }
+[data-theme="dark"] .offline-banner {
+  background: #1c1208;
+  border-bottom-color: #78350f;
+  color: #fcd34d;
+}
+[data-theme="dark"] .offline-banner svg { color: #fbbf24; }
+
+.banner-enter-active, .banner-leave-active { transition: max-height 0.3s ease, opacity 0.3s ease; overflow: hidden; }
+.banner-enter-from, .banner-leave-to { max-height: 0; opacity: 0; }
+.banner-enter-to, .banner-leave-from { max-height: 60px; opacity: 1; }
 
 /* Beta banner */
 .beta-banner {

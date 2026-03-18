@@ -3,12 +3,17 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 import { useAuth } from '../composables/useAuth'
+import { useNotifications } from '../composables/useNotifications'
+import { supabase } from '../lib/supabase'
 
 const router = useRouter()
 const { user, isGuest, signInWithGoogle, signOut } = useAuth()
+const { permission: notifPermission, requestPermission } = useNotifications()
 
 // ── Profilo ──────────────────────────────────────────────────
+// Avatar: usa quello personalizzato (da Supabase Storage) se disponibile, altrimenti Google
 const avatarUrl = computed(() =>
+  data.value.settings.avatarUrl       ||
   user.value?.user_metadata?.avatar_url ||
   user.value?.user_metadata?.picture    ||
   null
@@ -46,6 +51,123 @@ async function handleSignOut() {
 async function loginWithGoogle() {
   await signInWithGoogle()
 }
+
+// ── Notifiche browser ─────────────────────────────────────────
+const notifLoading = ref(false)
+
+async function toggleNotifications(enabled) {
+  if (enabled && notifPermission.value !== 'granted') {
+    notifLoading.value = true
+    const granted = await requestPermission()
+    notifLoading.value = false
+    if (!granted) return // l'utente ha negato
+  }
+  await setSetting('notificationsEnabled', enabled)
+}
+
+// ── Profilo pubblico ──────────────────────────────────────────
+const publicProfileCopied = ref(false)
+const isPublic = computed({
+  get: () => !!data.value.settings.isPublic,
+  set: (v) => setSetting('isPublic', v),
+})
+const publicProfileUrl = computed(() => {
+  const username = data.value.settings.username
+  if (!username) return ''
+  const base = window.location.origin + window.location.pathname
+  return base + '#/u/' + encodeURIComponent(username)
+})
+
+async function copyPublicLink() {
+  if (!publicProfileUrl.value) return
+  await navigator.clipboard.writeText(publicProfileUrl.value)
+  publicProfileCopied.value = true
+  setTimeout(() => { publicProfileCopied.value = false }, 2000)
+}
+
+// ── Avatar upload ─────────────────────────────────────────────
+const avatarInput     = ref(null)
+const avatarUploading = ref(false)
+const avatarError     = ref('')
+
+function triggerAvatarUpload() {
+  avatarError.value = ''
+  avatarInput.value?.click()
+}
+
+async function handleAvatarFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    avatarError.value = 'Immagine troppo grande (max 2MB)'
+    event.target.value = ''
+    return
+  }
+  avatarUploading.value = true
+  avatarError.value = ''
+  try {
+    const uid  = user.value?.id
+    const ext  = file.name.split('.').pop().toLowerCase()
+    const path = `${uid}/avatar.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (upErr) throw upErr
+
+    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+    // Aggiungi timestamp per busting della cache
+    const publicUrl = urlData.publicUrl + '?t=' + Date.now()
+    await setSetting('avatarUrl', publicUrl)
+  } catch (e) {
+    console.error('[avatar upload]', e)
+    avatarError.value = 'Errore durante il caricamento'
+  } finally {
+    avatarUploading.value = false
+    event.target.value = ''
+  }
+}
+
+async function removeAvatar() {
+  await setSetting('avatarUrl', null)
+}
+
+// ── Eliminazione account ──────────────────────────────────────
+const deletingAccount   = ref(false)
+const deleteConfirmStep = ref(0) // 0=idle, 1=first confirm, 2=typing confirm
+const deleteInput       = ref('')
+const deleteError       = ref('')
+
+function startDeleteAccount() {
+  deleteConfirmStep.value = 1
+  deleteInput.value = ''
+  deleteError.value = ''
+}
+
+function cancelDeleteAccount() {
+  deleteConfirmStep.value = 0
+  deleteInput.value = ''
+  deleteError.value = ''
+}
+
+async function confirmDeleteAccount() {
+  if (deleteInput.value !== 'ELIMINA') {
+    deleteError.value = 'Scrivi ELIMINA per confermare'
+    return
+  }
+  deletingAccount.value = true
+  deleteError.value = ''
+  try {
+    const { error } = await supabase.rpc('delete_user_account')
+    if (error) throw error
+    await signOut()
+    router.push('/login')
+  } catch (e) {
+    console.error('[delete account]', e)
+    deleteError.value = 'Errore durante l\'eliminazione. Riprova.'
+    deletingAccount.value = false
+  }
+}
+
 const {
   data,
   setTheme,
@@ -182,14 +304,30 @@ async function resetData() {
     <div class="profile-card">
       <!-- Avatar -->
       <div class="profile-avatar-wrap">
-        <img v-if="avatarUrl && !isGuest" :src="avatarUrl" class="profile-avatar" alt="Avatar" referrerpolicy="no-referrer"/>
+        <img v-if="avatarUrl" :src="avatarUrl" class="profile-avatar" alt="Avatar" referrerpolicy="no-referrer"/>
         <div v-else class="profile-avatar-placeholder">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
           </svg>
         </div>
+        <button v-if="!isGuest" class="btn-avatar-edit" @click="triggerAvatarUpload" :disabled="avatarUploading" title="Cambia foto">
+          <svg v-if="!avatarUploading" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <div v-else class="avatar-spinner"></div>
+        </button>
+        <input ref="avatarInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="handleAvatarFile"/>
         <span v-if="isGuest" class="profile-guest-badge">Ospite</span>
+      </div>
+
+      <!-- Errore avatar -->
+      <div v-if="avatarError" class="avatar-error">{{ avatarError }}</div>
+      <!-- Link rimuovi avatar personalizzato -->
+      <div v-if="!isGuest && data.settings.avatarUrl" class="avatar-remove-wrap">
+        <button class="btn-avatar-remove" @click="removeAvatar">Rimuovi foto personalizzata</button>
       </div>
 
       <!-- Info -->
@@ -451,6 +589,27 @@ async function resetData() {
     <div class="settings-group">
       <div class="group-title">Notifiche e scadenze</div>
 
+      <!-- Abilita notifiche -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Notifiche push</div>
+          <div class="setting-description">
+            <span v-if="notifPermission === 'denied'">Bloccate dal browser — abilitale nelle impostazioni del sito</span>
+            <span v-else-if="notifPermission === 'granted'">Permesso concesso</span>
+            <span v-else>Avvisi per scadenze imminenti o scadute</span>
+          </div>
+        </div>
+        <label class="toggle" :class="{ disabled: notifPermission === 'denied' }">
+          <input
+            type="checkbox"
+            :checked="!!data.settings.notificationsEnabled"
+            :disabled="notifPermission === 'denied' || notifLoading"
+            @change="e => toggleNotifications(e.target.checked)"
+          />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
       <div class="setting-item">
         <div class="setting-info">
           <div class="setting-label">Avviso scadenze</div>
@@ -466,6 +625,47 @@ async function resetData() {
           />
           <span class="notify-unit">gg</span>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Profilo pubblico ── -->
+    <div v-if="!isGuest" class="settings-group">
+      <div class="group-title">Profilo pubblico</div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Rendi il profilo pubblico</div>
+          <div class="setting-description">
+            Il tuo profilo sarà visibile a chiunque abbia il link
+          </div>
+        </div>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            :checked="isPublic"
+            @change="e => setSetting('isPublic', e.target.checked)"
+          />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div v-if="isPublic" class="setting-item setting-item-col">
+        <div class="setting-info">
+          <div class="setting-label">Link pubblico</div>
+          <div v-if="publicProfileUrl" class="setting-description public-link-preview">
+            {{ publicProfileUrl }}
+          </div>
+          <div v-else class="setting-description" style="color: var(--warning, #f59e0b)">
+            Imposta un username nelle info profilo per generare il link
+          </div>
+        </div>
+        <button v-if="publicProfileUrl" class="btn btn-sm btn-secondary" @click="copyPublicLink">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:14px;height:14px">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+          </svg>
+          {{ publicProfileCopied ? 'Copiato!' : 'Copia link' }}
+        </button>
       </div>
     </div>
 
@@ -609,11 +809,56 @@ async function resetData() {
       <div class="setting-item">
         <div class="setting-info">
           <div class="setting-label">Elimina tutti i dati</div>
-          <div class="setting-description">Cancella permanentemente tutti i dati</div>
+          <div class="setting-description">Cancella permanentemente tutti i dati locali</div>
         </div>
         <button class="btn btn-sm btn-danger" @click="resetData">
           Elimina tutto
         </button>
+      </div>
+
+      <!-- Elimina account (solo utenti loggati) -->
+      <div v-if="!isGuest" class="setting-item setting-item-col">
+        <div class="setting-info">
+          <div class="setting-label">Elimina account</div>
+          <div class="setting-description">Rimuove l'account e tutti i dati associati in modo permanente</div>
+        </div>
+
+        <!-- Step 0: bottone iniziale -->
+        <div v-if="deleteConfirmStep === 0" style="width:100%;margin-top:8px">
+          <button class="btn btn-sm btn-danger" @click="startDeleteAccount">
+            Elimina account
+          </button>
+        </div>
+
+        <!-- Step 1: primo avviso -->
+        <div v-else-if="deleteConfirmStep === 1" class="delete-confirm-box">
+          <p class="delete-confirm-warn">
+            ⚠️ Stai per eliminare il tuo account e <strong>tutti</strong> i dati in modo irreversibile.
+          </p>
+          <div class="delete-confirm-btns">
+            <button class="btn btn-sm btn-secondary" @click="cancelDeleteAccount">Annulla</button>
+            <button class="btn btn-sm btn-danger" @click="deleteConfirmStep = 2">Continua</button>
+          </div>
+        </div>
+
+        <!-- Step 2: conferma digitando ELIMINA -->
+        <div v-else-if="deleteConfirmStep === 2" class="delete-confirm-box">
+          <p class="delete-confirm-warn">Scrivi <strong>ELIMINA</strong> per confermare:</p>
+          <input
+            v-model="deleteInput"
+            type="text"
+            class="setting-text-input delete-type-input"
+            placeholder="ELIMINA"
+            @keyup.enter="confirmDeleteAccount"
+          />
+          <div v-if="deleteError" class="delete-error">{{ deleteError }}</div>
+          <div class="delete-confirm-btns">
+            <button class="btn btn-sm btn-secondary" @click="cancelDeleteAccount" :disabled="deletingAccount">Annulla</button>
+            <button class="btn btn-sm btn-danger" @click="confirmDeleteAccount" :disabled="deletingAccount || deleteInput !== 'ELIMINA'">
+              {{ deletingAccount ? 'Eliminazione...' : 'Elimina definitivamente' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1197,6 +1442,109 @@ async function resetData() {
 }
 .app-footer-link:hover {
   text-decoration: underline;
+}
+
+/* ── Avatar edit button ── */
+.btn-avatar-edit {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-card);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-avatar-edit svg { width: 12px; height: 12px; }
+.btn-avatar-edit:hover { background: #1d4ed8; }
+.btn-avatar-edit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.avatar-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.avatar-error {
+  font-size: 12px;
+  color: var(--danger);
+  text-align: center;
+  margin-top: -8px;
+}
+
+.avatar-remove-wrap {
+  text-align: center;
+  margin-top: -6px;
+}
+
+.btn-avatar-remove {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 4px;
+}
+
+/* Public link preview */
+.public-link-preview {
+  word-break: break-all;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--primary);
+  margin-top: 4px;
+}
+
+/* Toggle disabled */
+.toggle.disabled { opacity: 0.45; }
+
+/* ── Delete account confirm ── */
+.delete-confirm-box {
+  width: 100%;
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.delete-confirm-warn {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.delete-confirm-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.delete-type-input {
+  width: 100%;
+  font-family: monospace;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.delete-error {
+  font-size: 12px;
+  color: var(--danger);
 }
 
 /* Mappa carburanti */
