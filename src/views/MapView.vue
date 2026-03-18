@@ -140,7 +140,7 @@ function formatDate(dateStr) {
       </svg>
       <h2>Nessun veicolo</h2>
       <p>Aggiungi prima un veicolo</p>
-      <button class="btn btn-primary mt-16" @click="router.push('/vehicles')">
+      <button class="btn btn-primary" style="margin-top:16px" @click="router.push('/vehicles')">
         Aggiungi Veicolo
       </button>
     </div>
@@ -159,14 +159,14 @@ function formatDate(dateStr) {
       <div ref="mapContainer" class="map-container"></div>
 
       <!-- Location list -->
-      <div v-if="fuelRecordsWithLocation.length === 0" class="card mt-16">
+      <div v-if="fuelRecordsWithLocation.length === 0" class="card" style="margin-top:16px">
         <div class="empty-state" style="padding: 20px;">
           <p>Nessun rifornimento con posizione registrata</p>
           <small>Quando registri un rifornimento, usa "Rileva posizione" per salvare dove hai fatto rifornimento</small>
         </div>
       </div>
 
-      <div v-else class="card mt-16">
+      <div v-else class="card" style="margin-top:16px">
         <h3 class="card-title" style="margin-bottom: 12px;">Rifornimenti sulla mappa ({{ fuelRecordsWithLocation.length }})</h3>
         <div
           v-for="(record, index) in fuelRecordsWithLocation.slice(0, 5)"

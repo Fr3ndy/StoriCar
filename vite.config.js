@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   base: process.env.VITE_BASE_URL || '/StoriCar/',
@@ -12,6 +13,7 @@ export default defineConfig({
     drop: []
   },
   plugins: [
+    tailwindcss(),
     vue(),
     VitePWA({
       registerType: 'autoUpdate',

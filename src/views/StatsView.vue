@@ -322,13 +322,13 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
       </svg>
       <h2>Nessun veicolo</h2>
       <p>Aggiungi prima un veicolo</p>
-      <button class="btn btn-primary mt-16" @click="router.push('/vehicles')">Aggiungi Veicolo</button>
+      <button class="btn btn-primary" style="margin-top:16px" @click="router.push('/vehicles')">Aggiungi Veicolo</button>
     </div>
 
     <div v-else>
 
       <!-- Vehicle selector -->
-      <div class="vehicle-selector">
+      <div style="margin-bottom:12px">
         <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
           <option v-for="v in vehicles" :key="v.id" :value="v.id">
             {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
@@ -917,7 +917,10 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
 </template>
 
 <style scoped>
-.stats-view { padding-bottom: 8px; }
+.stats-view {
+  padding: 16px;
+  padding-bottom: 100px;
+}
 
 /* ── Period filter ── */
 .period-filter {

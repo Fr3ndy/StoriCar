@@ -124,7 +124,7 @@ function editRecord(record) {
 </script>
 
 <template>
-  <div class="fuel-view">
+  <div class="view-container">
 
     <!-- No vehicles -->
     <div v-if="!hasVehicles" class="empty-state">
@@ -132,13 +132,13 @@ function editRecord(record) {
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
       <h2>Nessun veicolo</h2>
-      <p>Aggiungi prima un veicolo</p>
-      <button class="btn btn-primary mt-16" @click="router.push('/vehicles')">Aggiungi Veicolo</button>
+      <p>Aggiungi prima un veicolo per registrare i rifornimenti</p>
+      <button class="btn btn-primary" style="margin-top:16px" @click="router.push('/vehicles')">Aggiungi Veicolo</button>
     </div>
 
-    <div v-else>
+    <template v-else>
       <!-- Vehicle selector -->
-      <div class="vehicle-selector">
+      <div class="section-px" style="margin-bottom:12px">
         <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
           <option v-for="v in vehicles" :key="v.id" :value="v.id">
             {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
@@ -147,30 +147,30 @@ function editRecord(record) {
       </div>
 
       <!-- Filter bar -->
-      <div class="filter-bar card">
-        <div class="filter-bar-header" @click="showFilters = !showFilters">
-          <div class="filter-bar-left">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div class="card filter-card">
+        <div class="filter-header" @click="showFilters = !showFilters">
+          <div class="filter-left">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="filter-icon">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707l-6.414 6.414A1 1 0 0014 13.828V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-7.172a1 1 0 00-.293-.707L1.293 6.707A1 1 0 011 6V4z" />
             </svg>
-            <span>Filtri</span>
-            <span v-if="hasActiveFilters" class="filter-active-dot"></span>
+            <span class="filter-label">Filtri</span>
+            <span v-if="hasActiveFilters" class="filter-dot"></span>
           </div>
-          <div class="filter-bar-right">
+          <div class="filter-right">
             <span class="record-count">{{ fuelRecords.length }} rifornimenti</span>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="chevron" :class="{ 'rotated': showFilters }">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="chevron" :class="{ rotated: showFilters }">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
         </div>
 
-        <div v-if="showFilters" class="filter-controls">
+        <div v-if="showFilters" class="filter-body">
           <div class="filter-row">
-            <select v-model="filterYear" class="form-select filter-select">
+            <select v-model="filterYear" class="form-select">
               <option value="">Tutti gli anni</option>
               <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
             </select>
-            <select v-model="filterMonth" class="form-select filter-select">
+            <select v-model="filterMonth" class="form-select">
               <option value="">Tutti i mesi</option>
               <option v-for="m in months" :key="m.value" :value="m.value">{{ m.label }}</option>
             </select>
@@ -179,49 +179,55 @@ function editRecord(record) {
             v-model="filterText"
             type="text"
             class="form-input"
-            placeholder="Cerca per indirizzo o note..."
+            placeholder="Cerca per indirizzo o note…"
           />
-          <button v-if="hasActiveFilters" class="btn btn-sm btn-secondary reset-btn" @click="resetFilters">
+          <button v-if="hasActiveFilters" class="btn btn-sm btn-secondary" style="align-self:flex-start" @click="resetFilters">
             Rimuovi filtri
           </button>
         </div>
       </div>
 
-      <!-- Empty filtered state -->
+      <!-- Empty state -->
       <div v-if="fuelRecords.length === 0" class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
         <h2>{{ hasActiveFilters ? 'Nessun risultato' : 'Nessun rifornimento' }}</h2>
         <p>{{ hasActiveFilters ? 'Prova a modificare i filtri' : 'Registra il tuo primo rifornimento' }}</p>
-        <button v-if="hasActiveFilters" class="btn btn-secondary mt-16" @click="resetFilters">Rimuovi filtri</button>
+        <button v-if="hasActiveFilters" class="btn btn-secondary" style="margin-top:16px" @click="resetFilters">Rimuovi filtri</button>
       </div>
 
-      <!-- Timeline list -->
+      <!-- Timeline -->
       <div v-else class="timeline">
-        <div v-for="(record, index) in fuelRecords" :key="record.id" class="timeline-item">
+        <div v-for="(record, index) in fuelRecords" :key="record.id" class="tl-item">
 
-          <!-- Left: date + vertical line -->
-          <div class="timeline-left">
-            <div class="timeline-date">
+          <!-- Date column -->
+          <div class="tl-left">
+            <div class="tl-date">
               <span class="tl-day">{{ formatDay(record.date) }}</span>
               <span class="tl-month">{{ formatMonthShort(record.date) }}</span>
             </div>
-            <div v-if="index < fuelRecords.length - 1" class="timeline-line"></div>
+            <div v-if="index < fuelRecords.length - 1" class="tl-line"></div>
           </div>
 
-          <!-- Right: content card -->
-          <div class="timeline-card card">
-            <div class="tc-header" @click="editRecord(record)">
+          <!-- Card -->
+          <div class="tl-card card">
+            <!-- Header row -->
+            <div class="tc-top" @click="editRecord(record)">
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
               <div class="tc-badges">
                 <span v-if="record.remainingRange != null" class="badge-range" title="Autonomia registrata">⚡</span>
-                <span v-if="getConsumptionDisplay(record)" class="tc-consumption" :class="consumptionClass(record)">
+                <span
+                  v-if="getConsumptionDisplay(record)"
+                  class="tc-cons"
+                  :class="consumptionClass(record)"
+                >
                   {{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}
                 </span>
               </div>
             </div>
 
+            <!-- Details -->
             <div class="tc-details" @click="editRecord(record)">
               <span v-if="record.liters">{{ formatNumber(record.liters) }} L</span>
               <span v-if="record.pricePerLiter">{{ formatNumber(record.pricePerLiter, 3) }} €/L</span>
@@ -229,22 +235,25 @@ function editRecord(record) {
               <span v-if="record.odometer">odo {{ Math.round(record.odometer).toLocaleString('it-IT') }}</span>
             </div>
 
+            <!-- Location -->
             <div v-if="record.address" class="tc-location" @click="editRecord(record)">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="flex-shrink:0;">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               </svg>
               <span>{{ record.address }}</span>
             </div>
 
+            <!-- Notes -->
             <div v-if="record.notes" class="tc-notes" @click="editRecord(record)">{{ record.notes }}</div>
 
+            <!-- Actions -->
             <div class="tc-actions">
-              <button class="btn-icon-sm" @click="editRecord(record)" title="Modifica">
+              <button class="action-btn" @click="editRecord(record)" title="Modifica">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               </button>
-              <button class="btn-icon-sm danger" @click="confirmDelete(record)" title="Elimina">
+              <button class="action-btn danger" @click="confirmDelete(record)" title="Elimina">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
@@ -254,52 +263,63 @@ function editRecord(record) {
         </div>
       </div>
 
+      <!-- FAB -->
       <button class="fab" @click="router.push('/fuel/add')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
         </svg>
       </button>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-/* Filter bar */
-.filter-bar {
+.view-container {
+  padding: 16px;
+  padding-bottom: 100px;
+}
+
+.section-px { padding: 0; }
+
+/* Filter card */
+.filter-card {
   padding: 12px 14px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
-.filter-bar-header {
+.filter-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
   cursor: pointer;
+  user-select: none;
 }
 
-.filter-bar-left {
+.filter-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.filter-bar-left svg {
-  width: 16px;
-  height: 16px;
+.filter-icon {
+  width: 15px;
+  height: 15px;
   color: var(--primary);
+  flex-shrink: 0;
 }
 
-.filter-active-dot {
+.filter-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--primary);
+  flex-shrink: 0;
 }
 
-.filter-bar-right {
+.filter-right {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -315,13 +335,12 @@ function editRecord(record) {
   height: 16px;
   color: var(--text-secondary);
   transition: transform 0.2s;
+  flex-shrink: 0;
 }
 
-.chevron.rotated {
-  transform: rotate(180deg);
-}
+.chevron.rotated { transform: rotate(180deg); }
 
-.filter-controls {
+.filter-body {
   margin-top: 12px;
   display: flex;
   flex-direction: column;
@@ -334,44 +353,36 @@ function editRecord(record) {
   gap: 8px;
 }
 
-.filter-select {
-  font-size: 14px;
-  padding: 8px 10px;
-}
-
-.reset-btn {
-  align-self: flex-start;
-}
-
 /* Timeline */
 .timeline {
-  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-.timeline-item {
+.tl-item {
   display: flex;
   gap: 10px;
   align-items: flex-start;
   min-width: 0;
 }
 
-.timeline-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 42px;
-  flex-shrink: 0;
-}
-
-.timeline-date {
+.tl-left {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 40px;
-  height: 50px;
+  flex-shrink: 0;
+}
+
+.tl-date {
+  width: 40px;
+  height: 48px;
   background: var(--bg-card);
   border: 1.5px solid var(--border);
   border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
@@ -391,7 +402,7 @@ function editRecord(record) {
   font-weight: 600;
 }
 
-.timeline-line {
+.tl-line {
   width: 2px;
   flex: 1;
   background: var(--border);
@@ -399,18 +410,19 @@ function editRecord(record) {
   min-height: 12px;
 }
 
-.timeline-card {
+/* Timeline card */
+.tl-card {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  margin-bottom: 10px;
   padding: 12px 14px;
+  margin-bottom: 10px;
+  overflow: hidden;
 }
 
-.tc-header {
+.tc-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 6px;
   cursor: pointer;
 }
@@ -432,23 +444,23 @@ function editRecord(record) {
   opacity: 0.7;
 }
 
-.tc-consumption {
-  font-size: 12px;
+.tc-cons {
+  font-size: 11px;
   font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 10px;
+  padding: 3px 8px;
+  border-radius: 20px;
   background: var(--bg-secondary);
   color: var(--text-secondary);
 }
 
-.cons-good { background: rgba(16, 185, 129, 0.12); color: #10b981; }
-.cons-avg  { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
-.cons-poor { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.cons-good { background: rgba(16,185,129,0.12); color: #10b981; }
+.cons-avg  { background: rgba(245,158,11,0.12);  color: #f59e0b; }
+.cons-poor { background: rgba(239,68,68,0.12);   color: #ef4444; }
 
 .tc-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 4px 12px;
   font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 4px;
@@ -456,14 +468,20 @@ function editRecord(record) {
 }
 
 .tc-location {
-  font-size: 11px;
-  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 5px;
   min-width: 0;
   cursor: pointer;
+}
+
+.tc-location svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
 }
 
 .tc-location span {
@@ -473,17 +491,11 @@ function editRecord(record) {
   min-width: 0;
 }
 
-.tc-location svg {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
-}
-
 .tc-notes {
   font-size: 12px;
   color: var(--text-secondary);
   font-style: italic;
-  margin-top: 4px;
+  margin-top: 5px;
   cursor: pointer;
 }
 
@@ -491,12 +503,12 @@ function editRecord(record) {
   display: flex;
   gap: 4px;
   justify-content: flex-end;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
-.btn-icon-sm {
+.action-btn {
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -508,22 +520,11 @@ function editRecord(record) {
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 
-.btn-icon-sm svg {
-  width: 15px;
-  height: 15px;
-}
-
-.btn-icon-sm:active {
-  transform: scale(0.92);
-}
-
-.btn-icon-sm.danger {
-  color: var(--danger);
-}
-
-.btn-icon-sm.danger:active {
-  background: rgba(239, 68, 68, 0.12);
-}
+.action-btn svg { width: 15px; height: 15px; }
+.action-btn:active { transform: scale(0.9); }
+.action-btn.danger { color: var(--danger); }
+.action-btn.danger:active { background: rgba(239,68,68,0.1); }
 </style>

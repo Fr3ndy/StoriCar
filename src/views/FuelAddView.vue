@@ -51,8 +51,8 @@ const form = ref({
 const lockedField = ref(null)
 
 // Stato prezzi carburante vicini
-const nearbyPrice = ref(null)       // prezzo trovato dal distributore più vicino
-const nearbyStation = ref(null)     // distributore più vicino
+const nearbyPrice = ref(null)
+const nearbyStation = ref(null)
 const pricesSearchDone = ref(false)
 const priceDismissed = ref(false)
 
@@ -102,22 +102,14 @@ const prevRecord = computed(() => {
   )
 })
 
+// Km percorsi = semplice differenza odometro. L'autonomia rimasta è solo un
+// dato informativo e NON modifica il calcolo dei km.
 const kmDrivenCalc = computed(() => {
   if (!form.value.odometer || !prevRecord.value?.odometer) return null
   const rawKm = parseFloat(form.value.odometer) - prevRecord.value.odometer
   if (rawKm <= 0) return null
-  const prevRange = prevRecord.value.remainingRange ?? null
-  const currRange = form.value.remainingRange !== '' ? parseFloat(form.value.remainingRange) : null
-  if (prevRange != null && currRange != null && !isNaN(currRange)) {
-    const effective = rawKm + prevRange - currRange
-    return effective > 0 ? effective : null
-  }
   return rawKm
 })
-
-const kmDrivenIsEffective = computed(() =>
-  prevRecord.value?.remainingRange != null && form.value.remainingRange !== ''
-)
 const kmDrivenToSave = computed(() => kmDrivenCalc.value ?? 0)
 
 onMounted(async () => {
@@ -150,7 +142,6 @@ onMounted(async () => {
     } else if (vehicles.value.length > 0) {
       form.value.vehicleId = vehicles.value[0].id
     }
-    // Rileva posizione automaticamente all'apertura
     await getLocation()
   }
 })
@@ -169,6 +160,16 @@ async function getLocation() {
   }
 }
 
+// Distanza in km tra due coordinate (formula Haversine)
+function distKm(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 async function searchNearbyPrice(lat, lng) {
   const fuelName = vehicleFuelApiName.value
   if (!fuelName) {
@@ -181,9 +182,12 @@ async function searchNearbyPrice(lat, lng) {
 
   if (!result?.impianti?.length) return
 
-  // Trova il distributore più vicino che ha il carburante del veicolo
-  // L'API restituisce già ordinati per distanza, quindi il primo è il più vicino
-  const station = result.impianti.find(imp => imp.prezzi?.[fuelName])
+  // Filtra le stazioni con il carburante cercato e coordinate valide,
+  // poi ordina per distanza dalla posizione utente → prende la più vicina
+  const station = result.impianti
+    .filter(imp => imp.prezzi?.[fuelName] && imp.lat != null && imp.lng != null)
+    .sort((a, b) => distKm(lat, lng, a.lat, a.lng) - distKm(lat, lng, b.lat, b.lng))[0]
+
   if (!station) return
 
   nearbyStation.value = station
@@ -241,8 +245,8 @@ const canSave = computed(() =>
 </script>
 
 <template>
-  <div class="fuel-add">
-    <div class="card">
+  <div class="view-container">
+    <div class="card form-card">
 
       <!-- Vehicle selector -->
       <div class="form-group">
@@ -260,15 +264,19 @@ const canSave = computed(() =>
         <input v-model="form.date" type="date" class="form-input" required />
       </div>
 
-      <!-- Odometer section -->
-      <div class="section-divider">
-        <span>Chilometri</span>
-      </div>
+      <!-- Section: Km -->
+      <div class="section-divider"><span>Chilometri</span></div>
 
       <div v-if="prevRecord?.odometer" class="info-box">
-        Ultimo contakm: <strong>{{ prevRecord.odometer.toLocaleString('it-IT') }} km</strong>
-        <span v-if="prevRecord.date"> · {{ new Date(prevRecord.date).toLocaleDateString('it-IT') }}</span>
-        <span v-if="prevRecord.remainingRange != null" class="info-box-range"> · autonomia {{ prevRecord.remainingRange }} km</span>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="info-icon">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>
+          Ultimo contakm: <strong>{{ prevRecord.odometer.toLocaleString('it-IT') }} km</strong>
+          <span v-if="prevRecord.date"> · {{ new Date(prevRecord.date).toLocaleDateString('it-IT') }}</span>
+          <!-- autonomia storica nascosta insieme al campo input (vedi commento sopra) -->
+          <!-- <span v-if="prevRecord.remainingRange != null" class="info-range"> · autonomia {{ prevRecord.remainingRange }} km</span> -->
+        </span>
       </div>
 
       <div class="form-row">
@@ -284,37 +292,60 @@ const canSave = computed(() =>
             required
           />
         </div>
-        <div class="form-group">
-          <label class="form-label">Autonomia rimanente</label>
-          <input
-            v-model="form.remainingRange"
-            type="number"
-            step="1"
-            min="0"
-            class="form-input"
-            placeholder="es. 150 km"
-          />
-        </div>
+
+        <!--
+          CAMPO AUTONOMIA RIMASTA — temporaneamente nascosto.
+
+          Il dato viene già salvato nel record (campo remainingRange) ma
+          non viene più mostrato nel form perché il suo utilizzo statistico
+          non è ancora implementato correttamente.
+
+          PROBLEMA: la formula precedente usava questo campo per correggere
+          i km percorsi (effective = rawKm + prevRange - currRange), ma questo
+          ha senso solo se:
+            1. L'autonomia viene inserita DOPO aver fatto benzina (non prima)
+            2. L'utente lo fa in modo coerente per ogni rifornimento
+          Senza queste garanzie, il calcolo introduceva errori imprevedibili.
+
+          COSA AVREBBE SENSO FARE:
+          - Usare remainingRange per ponderare il consumo nei rifornimenti
+            parziali (pieno non completo): se l'autonomia dopo il pieno è
+            molto più alta del solito, vuol dire che hai messo poca benzina
+            rispetto alla capienza del serbatoio.
+          - In StatsView, il consumo medio potrebbe essere calcolato come
+            (litriTotali) / (kmTotaliEffettivi) su una serie di rifornimenti
+            dove i kmEffettivi tengono conto del carburante residuo.
+          - Prima di riattivare: decidere se il dato si inserisce PRIMA o
+            DOPO aver fatto benzina, e indicarlo chiaramente nel label.
+
+          <div class="form-group">
+            <label class="form-label">Autonomia rimasta (dopo pieno)</label>
+            <input
+              v-model="form.remainingRange"
+              type="number"
+              step="1"
+              min="0"
+              class="form-input"
+              placeholder="es. 150"
+            />
+          </div>
+        -->
       </div>
 
       <!-- Km driven display -->
       <div class="form-group">
         <label class="form-label">Km percorsi</label>
-        <div class="form-input-readonly" :class="{ 'calculated': kmDrivenCalc != null, 'effective': kmDrivenIsEffective }">
+        <div class="km-display" :class="{ 'km-calculated': kmDrivenCalc != null }">
           <span v-if="kmDrivenCalc != null">
             {{ Math.round(kmDrivenCalc).toLocaleString('it-IT') }} km
-            <span v-if="kmDrivenIsEffective" class="effective-badge">corretto ✓</span>
           </span>
-          <span v-else class="placeholder-text">Inserisci contakm</span>
+          <span v-else class="km-placeholder">Inserisci contakm</span>
         </div>
       </div>
 
-      <!-- Fuel cost section -->
-      <div class="section-divider">
-        <span>Carburante</span>
-      </div>
+      <!-- Section: Carburante -->
+      <div class="section-divider"><span>Carburante</span></div>
 
-      <!-- Amount and Liters -->
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Importo (€) *</label>
@@ -331,7 +362,7 @@ const canSave = computed(() =>
         <div class="form-group">
           <label class="form-label">
             Litri
-            <span :class="lockedField === 'liters' ? 'field-badge locked' : 'field-badge auto'">
+            <span :class="['field-badge', lockedField === 'liters' ? 'locked' : 'auto']">
               {{ lockedField === 'liters' ? 'manuale' : 'auto' }}
             </span>
           </label>
@@ -341,7 +372,7 @@ const canSave = computed(() =>
             step="0.01"
             min="0"
             class="form-input"
-            :class="{ 'is-locked': lockedField === 'liters' }"
+            :class="{ 'input-locked': lockedField === 'liters' }"
             placeholder="auto"
             @input="lockedField = 'liters'"
           />
@@ -352,49 +383,39 @@ const canSave = computed(() =>
       <div class="form-group">
         <label class="form-label">
           Prezzo al litro (€/L)
-          <span :class="lockedField === 'pricePerLiter' ? 'field-badge locked' : 'field-badge auto'">
+          <span :class="['field-badge', lockedField === 'pricePerLiter' ? 'locked' : 'auto']">
             {{ lockedField === 'pricePerLiter' ? 'manuale' : 'auto' }}
           </span>
         </label>
 
-        <!-- Banner prezzo distributore vicino -->
-        <div
-          v-if="nearbyPrice && !priceDismissed && vehicleFuelApiName"
-          class="price-suggestion-banner"
-        >
-          <div class="price-suggestion-info">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="price-suggestion-icon">
+        <!-- Nearby price banner -->
+        <div v-if="nearbyPrice && !priceDismissed && vehicleFuelApiName" class="price-banner">
+          <div class="price-banner-info">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="price-pin">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <div>
-              <div class="price-suggestion-label">
-                {{ nearbyStation?.nome || 'Distributore' }} · {{ vehicleFuelApiName }} · prezzo nei sistemi
-              </div>
-              <div class="price-suggestion-value">
-                <strong>€ {{ nearbyPrice.toFixed(3) }}</strong>/L
-              </div>
+            <div class="price-banner-text">
+              <div class="price-station">{{ nearbyStation?.nome || 'Distributore' }} · {{ vehicleFuelApiName }}</div>
+              <div class="price-value"><strong>€ {{ nearbyPrice.toFixed(3) }}</strong>/L</div>
             </div>
           </div>
-          <div class="price-suggestion-actions">
-            <button type="button" class="btn-suggestion btn-suggestion-accept" @click="useNearbyPrice">
-              È corretto
-            </button>
-            <button type="button" class="btn-suggestion btn-suggestion-dismiss" @click="dismissPrice">
-              È diverso
-            </button>
+          <div class="price-banner-actions">
+            <button type="button" class="price-btn accept" @click="useNearbyPrice">È corretto</button>
+            <button type="button" class="price-btn dismiss" @click="dismissPrice">È diverso</button>
           </div>
         </div>
 
-        <!-- Caricamento prezzi -->
-        <div v-else-if="pricesLoading" class="price-loading">
-          Ricerca prezzi vicini...
+        <!-- Loading -->
+        <div v-else-if="pricesLoading" class="price-status loading">
+          <div class="spinner-xs"></div>
+          Ricerca prezzi vicini…
         </div>
 
-        <!-- Nessun distributore trovato -->
+        <!-- No stations -->
         <div
           v-else-if="pricesSearchDone && !nearbyPrice && form.location && vehicleFuelApiName && !priceDismissed"
-          class="price-no-stations"
+          class="price-status"
         >
           Nessun distributore trovato nelle vicinanze
         </div>
@@ -405,25 +426,23 @@ const canSave = computed(() =>
           step="0.001"
           min="0"
           class="form-input"
-          :class="{ 'is-locked': lockedField === 'pricePerLiter' }"
+          :class="{ 'input-locked': lockedField === 'pricePerLiter' }"
           placeholder="1.659"
           @input="lockedField = 'pricePerLiter'"
         />
       </div>
 
-      <!-- Location section -->
-      <div class="section-divider">
-        <span>Altro</span>
-      </div>
+      <!-- Section: Altro -->
+      <div class="section-divider"><span>Altro</span></div>
 
+      <!-- Location -->
       <div class="form-group">
         <label class="form-label">Posizione stazione</label>
 
-        <!-- Bottone rileva posizione: prioritario, mostrato anche se posizione già rilevata -->
         <button
           type="button"
           class="location-btn"
-          :class="{ 'location-btn-active': form.location }"
+          :class="{ active: form.location }"
           @click="getLocation"
           :disabled="geoLoading || pricesLoading"
         >
@@ -431,37 +450,46 @@ const canSave = computed(() =>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          {{ geoLoading ? 'Rilevamento...' : pricesLoading ? 'Ricerca prezzi...' : form.location ? 'Aggiorna posizione' : 'Rileva posizione' }}
+          <span>{{ geoLoading ? 'Rilevamento…' : pricesLoading ? 'Ricerca prezzi…' : form.location ? 'Aggiorna posizione' : 'Rileva posizione' }}</span>
         </button>
 
-        <!-- Preview posizione rilevata -->
         <div v-if="form.location" class="location-preview">
           <div class="location-coords">{{ form.location.lat.toFixed(6) }}, {{ form.location.lng.toFixed(6) }}</div>
           <div v-if="form.address" class="location-address">{{ form.address }}</div>
-          <button type="button" class="btn btn-sm btn-secondary mt-8" @click="removeLocation">Rimuovi</button>
+          <button type="button" class="btn btn-sm btn-secondary" style="margin-top:8px" @click="removeLocation">Rimuovi</button>
         </div>
 
-        <div v-if="geoError" class="error-text">{{ geoError }}</div>
+        <div v-if="geoError" class="field-error">{{ geoError }}</div>
       </div>
 
       <!-- Notes -->
       <div class="form-group">
         <label class="form-label">Note</label>
-        <textarea v-model="form.notes" class="form-input" rows="2" placeholder="Note opzionali..."></textarea>
+        <textarea v-model="form.notes" class="form-input" rows="2" placeholder="Note opzionali…"></textarea>
       </div>
 
       <!-- Actions -->
       <div class="form-actions">
         <button class="btn btn-secondary" @click="router.back()">Annulla</button>
         <button class="btn btn-primary" @click="save" :disabled="!canSave">
-          {{ isEditing ? 'Salva' : 'Aggiungi' }}
+          {{ isEditing ? 'Salva modifiche' : 'Aggiungi' }}
         </button>
       </div>
+
     </div>
   </div>
 </template>
 
 <style scoped>
+.view-container {
+  padding: 16px;
+  padding-bottom: 40px;
+}
+
+.form-card {
+  padding: 20px 16px;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -470,25 +498,19 @@ const canSave = computed(() =>
 
 .form-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
+/* Section divider */
 .section-divider {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 20px 0 14px;
-}
-
-.section-divider span {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-secondary);
-  white-space: nowrap;
 }
 
 .section-divider::before,
@@ -499,22 +521,44 @@ const canSave = computed(() =>
   background: var(--border);
 }
 
+.section-divider span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Info box */
 .info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 12px;
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--text-secondary);
 }
 
-.info-box-range {
+.info-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
   color: var(--primary);
-  font-weight: 500;
 }
 
-.form-input-readonly {
+.info-range {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Km display */
+.km-display {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -524,37 +568,33 @@ const canSave = computed(() =>
   border-radius: 12px;
   background: var(--bg-secondary);
   font-size: 15px;
+  color: var(--text-secondary);
 }
 
-.form-input-readonly.calculated {
+.km-display.km-calculated {
   color: var(--text-primary);
   font-weight: 500;
 }
 
-.form-input-readonly.effective {
+.km-display.km-effective {
   border-color: var(--primary);
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(37,99,235,0.05);
 }
 
-.form-input-readonly.not-available .placeholder-text {
-  color: var(--text-secondary);
+.km-placeholder {
   font-size: 13px;
 }
 
-.placeholder-text {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.effective-badge {
+.km-badge {
   font-size: 11px;
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(37,99,235,0.1);
   color: var(--primary);
   padding: 2px 7px;
-  border-radius: 10px;
+  border-radius: 20px;
   font-weight: 700;
 }
 
+/* Field badge */
 .field-badge {
   display: inline-block;
   font-size: 10px;
@@ -571,68 +611,29 @@ const canSave = computed(() =>
 }
 
 .field-badge.locked {
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(37,99,235,0.1);
   color: var(--primary);
 }
 
-.form-input.is-locked {
+.form-input.input-locked {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
 }
 
-/* Posizione */
-.location-btn-active {
-  background: rgba(99, 102, 241, 0.08) !important;
-  border-color: var(--primary) !important;
-  color: var(--primary) !important;
-}
-
-.location-preview {
-  padding: 12px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  margin-top: 8px;
-}
-
-.location-coords {
-  font-weight: 500;
-  margin-bottom: 4px;
-  font-size: 13px;
-}
-
-.location-address {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.mt-8 { margin-top: 8px; }
-
-.error-text {
-  color: var(--danger);
-  font-size: 14px;
-  margin-top: 8px;
-}
-
-textarea.form-input {
-  resize: vertical;
-  min-height: 60px;
-}
-
-/* Banner prezzo distributore vicino */
-.price-suggestion-banner {
+/* Price banner */
+.price-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: rgba(99, 102, 241, 0.07);
+  background: rgba(37,99,235,0.06);
   border: 1.5px solid var(--primary);
   border-radius: 10px;
   padding: 10px 12px;
   margin-bottom: 10px;
 }
 
-.price-suggestion-info {
+.price-banner-info {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -640,70 +641,147 @@ textarea.form-input {
   min-width: 0;
 }
 
-.price-suggestion-icon {
+.price-pin {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
   color: var(--primary);
 }
 
-.price-suggestion-label {
+.price-banner-text { min-width: 0; }
+
+.price-station {
   font-size: 11px;
   color: var(--text-secondary);
-  margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.price-suggestion-value {
+.price-value {
   font-size: 14px;
   color: var(--text-primary);
 }
 
-.price-suggestion-actions {
+.price-banner-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.btn-suggestion {
+.price-btn {
   font-size: 12px;
   font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 7px;
+  padding: 6px 10px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
   transition: opacity 0.15s;
 }
 
-.btn-suggestion:active { opacity: 0.7; }
+.price-btn:active { opacity: 0.7; }
 
-.btn-suggestion-accept {
+.price-btn.accept {
   background: var(--primary);
   color: #fff;
 }
 
-.btn-suggestion-dismiss {
+.price-btn.dismiss {
   background: var(--bg-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border);
 }
 
-.price-loading {
+.price-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
-  padding: 6px 10px;
-}
-
-.price-no-stations {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.price-status.loading { background: transparent; border: none; padding-left: 0; }
+
+.spinner-xs {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Location */
+.location-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.location-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.location-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(37,99,235,0.04);
+}
+
+.location-btn.active {
+  border-style: solid;
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(37,99,235,0.05);
+}
+
+.location-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.location-preview {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.location-coords {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.location-address {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.field-error {
+  font-size: 13px;
+  color: var(--danger);
+  margin-top: 6px;
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 60px;
 }
 </style>
