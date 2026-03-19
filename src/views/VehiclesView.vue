@@ -244,8 +244,7 @@ async function setAsDefault(vehicleId) {
 
 <style scoped>
 .view-container {
-  padding: 16px;
-  padding-bottom: 100px;
+  padding: 0 0 100px;
 }
 
 .form-card {
@@ -305,10 +304,13 @@ async function setAsDefault(vehicleId) {
   border-color: var(--primary);
 }
 
+.type-btn:not(.active) { color: var(--text-secondary); }
+
 /* Vehicle card */
 .vehicle-card {
   padding: 14px 16px;
   margin-bottom: 12px;
+  border-radius: var(--r-md);
 }
 
 .vehicle-top {
@@ -330,7 +332,7 @@ async function setAsDefault(vehicleId) {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(37,99,235,0.1);
+  background: var(--primary-soft);
   display: flex;
   align-items: center;
   justify-content: center;

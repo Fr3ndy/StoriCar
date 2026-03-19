@@ -306,8 +306,7 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
 
 <style scoped>
 .view-container {
-  padding: 16px;
-  padding-bottom: 100px;
+  padding: 0 0 100px;
 }
 
 /* Form */
@@ -436,6 +435,7 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
   margin-bottom: 10px;
   border-left: 4px solid var(--border);
   transition: border-color 0.18s;
+  border-radius: var(--r-md);
 }
 
 .deadline-card.expiring { border-left-color: var(--warning); }

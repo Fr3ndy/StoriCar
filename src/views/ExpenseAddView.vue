@@ -145,8 +145,7 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
 
 <style scoped>
 .view-container {
-  padding: 16px;
-  padding-bottom: 40px;
+  padding: 0 0 40px;
 }
 
 .form-card {

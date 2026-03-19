@@ -95,13 +95,12 @@ function enterAsGuest() {
 .login-logo {
   width: 68px;
   height: 68px;
-  background: linear-gradient(135deg, #1e40af, #2563eb);
+  background: var(--primary);
   border-radius: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 20px;
-  box-shadow: 0 6px 24px rgba(37,99,235,0.35);
 }
 .login-logo svg { width: 34px; height: 34px; color: white; }
 
@@ -142,14 +141,13 @@ function enterAsGuest() {
   gap: 10px;
   padding: 14px 16px;
   border: 1.5px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s;
-  box-shadow: 0 1px 4px var(--shadow);
 }
 .btn-google:hover:not(:disabled) {
   border-color: #2563eb;
@@ -182,7 +180,7 @@ function enterAsGuest() {
   gap: 8px;
   padding: 13px 16px;
   border: 1.5px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text-secondary);
   font-size: 14px;

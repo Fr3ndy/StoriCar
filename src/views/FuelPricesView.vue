@@ -427,7 +427,7 @@ watch(selectedId, (newId, oldId) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-bottom: 24px;
+  padding: 16px 16px 24px;
 }
 
 /* Top bar */
@@ -479,7 +479,7 @@ watch(selectedId, (newId, oldId) => {
 .map-wrap { position: relative; }
 .map-container {
   height: 360px;
-  border-radius: 16px;
+  border-radius: var(--r-md);
   overflow: hidden;
   border: 1px solid var(--border);
 }
