@@ -9,6 +9,23 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/).
 
 ---
 
+## [1.2.0] — 2026-03-19 ✨ Profilo pubblico & modalità ospite
+
+### Aggiunto
+- Foto profilo e username pubblico personalizzabile
+- Pagina pubblica del profilo (ancora in sviluppo)
+- Modalità ospite: accesso senza account con dati salvati solo in locale
+
+### Migliorato
+- Interfaccia grafica rinnovata con nuovo stile
+- Pagina dei costi carburante aggiornata
+- Aggiunta rifornimento ora suggerisce il prezzo del fornitore selezionato
+
+### Corretto
+- Risolti numerosi bug minori
+
+---
+
 ## [1.0.0] — 2025-06-01 🚀 Lancio iniziale
 
 ### Aggiunto
@@ -26,5 +43,5 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/).
 
 ---
 
-[1.1.0]: https://github.com/Fr3ndy/StoriCar/releases/tag/v1.1.0
+[1.2.0]: https://github.com/Fr3ndy/StoriCar/releases/tag/v1.2.0
 [1.0.0]: https://github.com/Fr3ndy/StoriCar/releases/tag/v1.0.0
