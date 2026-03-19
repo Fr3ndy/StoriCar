@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useStorage } from './composables/useStorage'
 import { useAuth } from './composables/useAuth'
 import { useNotifications } from './composables/useNotifications'
+import WhatsNewModal from './components/WhatsNewModal.vue'
 
 const router = useRouter()
 const route  = useRoute()
@@ -42,10 +43,10 @@ const pageTitle = computed(() => ({
   'fuel-add': 'Nuovo Rifornimento', 'fuel-edit': 'Modifica Rifornimento',
   expenses: 'Spese', 'expenses-add': 'Nuova Spesa', 'expenses-edit': 'Modifica Spesa',
   deadlines: 'Scadenze', stats: 'Statistiche', map: 'Mappa',
-  'fuel-prices': 'Prezzi', settings: 'Impostazioni'
+  'fuel-prices': 'Prezzi', settings: 'Impostazioni', changelog: 'Novità'
 }[route.name] || 'Storicar'))
 
-const moreRoutes  = ['vehicles', 'stats', 'map', 'settings', 'expenses', 'expenses-add', 'expenses-edit', 'deadlines']
+const moreRoutes  = ['vehicles', 'stats', 'map', 'settings', 'expenses', 'expenses-add', 'expenses-edit', 'deadlines', 'changelog']
 const isMoreActive = computed(() => moreRoutes.includes(route.name))
 
 // Hide shell on login + public profile pages
@@ -152,6 +153,9 @@ onMounted(() => {
       </button>
     </nav>
 
+    <!-- ── WhatsNew modal ── -->
+    <WhatsNewModal v-if="isShell && dataReady" />
+
     <!-- ── Drawer overlay ── -->
     <Transition name="overlay">
       <div v-if="menuOpen" class="drawer-overlay" @click="closeMenu"/>
@@ -218,6 +222,18 @@ onMounted(() => {
               </svg>
             </span>
             <span class="drawer-item-label">Mappa</span>
+            <svg class="drawer-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+
+          <button class="drawer-item" :class="{ active: route.name === 'changelog' }" @click="navigateTo('/changelog')">
+            <span class="drawer-icon" style="background:rgba(99,102,241,0.10);color:#6366f1">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+              </svg>
+            </span>
+            <span class="drawer-item-label">Novità</span>
             <svg class="drawer-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>

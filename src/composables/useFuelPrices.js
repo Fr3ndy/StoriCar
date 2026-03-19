@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-const PRICES_API = import.meta.env.VITE_FUEL_PRICES_URL || './fuel-prices.php'
+const PRICES_API = import.meta.env.VITE_FUEL_PRICES_URL
 
 const cache = ref(null)
 const loading = ref(false)

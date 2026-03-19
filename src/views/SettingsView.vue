@@ -5,6 +5,7 @@ import { useStorage } from '../composables/useStorage'
 import { useAuth } from '../composables/useAuth'
 import { useNotifications } from '../composables/useNotifications'
 import { supabase } from '../lib/supabase'
+import { APP_VERSION } from '../lib/changelog'
 
 const router = useRouter()
 const { user, isGuest, signInWithGoogle, signOut } = useAuth()
@@ -425,7 +426,7 @@ async function resetData() {
       </div>
     </div>
 
-    <!-- ── App identity ── -->
+    <!-- ── App identity ──
     <div class="app-hero">
       <div class="app-hero-icon">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -436,7 +437,7 @@ async function resetData() {
         <div class="app-hero-name">Storicar</div>
         <div class="app-hero-sub">Car Expense Tracker · v2.0</div>
       </div>
-    </div>
+    </div> -->
 
     <!-- ── Riepilogo dati ── -->
     <div class="data-summary">
@@ -870,8 +871,14 @@ async function resetData() {
         </svg>
       </div>
       <div class="app-footer-name">Storicar</div>
-      <div class="app-footer-version">Versione 2.0.0</div>
+      <div class="app-footer-version">Versione {{ APP_VERSION }}</div>
       <div class="app-footer-desc">Traccia le spese della tua auto in modo semplice</div>
+      <button class="app-footer-changelog" @click="router.push('/changelog')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        Vedi novità e versioni
+      </button>
       <div class="app-footer-author">
         Sviluppato da
         <a href="https://github.com/Fr3ndy/StoriCar" target="_blank" rel="noopener" class="app-footer-link">Andrea Spina</a>
@@ -1430,6 +1437,23 @@ async function resetData() {
   margin-top: 6px;
   color: var(--text-secondary);
 }
+.app-footer-changelog {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.app-footer-changelog svg { width: 13px; height: 13px; }
+.app-footer-changelog:active { background: var(--border); }
 .app-footer-author {
   font-size: 12px;
   margin-top: 8px;
