@@ -2,18 +2,13 @@
 // Sicurezza: non esporre mai errori PHP in produzione
 ini_set('display_errors', 0);
 error_reporting(0);
-/**
- * fuel-prices.php
- * Prezzi benzina via API carburanti.mise.gov.it
- * Area: Assemini, Sestu, Uta, Elmas, Quartu, Quartucciu, Pirri, Cagliari
- *
- * GET fuel-prices.php           → tutti gli impianti
- * GET fuel-prices.php?refresh=1 → forza aggiornamento cache
- */
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: https://fr3ndy.github.io');
 header('Access-Control-Allow-Methods: GET');
+
+// Origine consentita: dalla variabile d'ambiente o wildcard in sviluppo
+$allowedOrigin = getenv('ALLOWED_ORIGIN') ?: '*';
+header('Access-Control-Allow-Origin: ' . $allowedOrigin);
 
 define('CACHE_DIR', __DIR__ . '/cache');
 define('CACHE_TTL', 3600); // 1 ora
@@ -21,10 +16,24 @@ define('REFRESH_COOLDOWN', 30); // Cooldown tra refresh forzati: 5 minuti
 
 define('API_URL', 'https://carburanti.mise.gov.it/ospzApi/search/zone');
 
-// Coordinate e raggio: da GET se presenti, altrimenti default Cagliari
-$centerLat = isset($_GET['lat']) ? (float)$_GET['lat'] : 39.27;
-$centerLng = isset($_GET['lng']) ? (float)$_GET['lng'] : 9.09;
-$radiusKm  = isset($_GET['km'])  ? max(1, min(50, (int)$_GET['km'])) : 20;
+// Coordinate obbligatorie: devono essere inviate dal client (GPS)
+if (!isset($_GET['lat']) || !isset($_GET['lng'])) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Parametri lat e lng obbligatori.']);
+    exit;
+}
+
+$centerLat = (float)$_GET['lat'];
+$centerLng = (float)$_GET['lng'];
+
+// Validazione coordinate
+if ($centerLat < -90 || $centerLat > 90 || $centerLng < -180 || $centerLng > 180) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Coordinate non valide.']);
+    exit;
+}
+
+$radiusKm = isset($_GET['km']) ? max(1, min(50, (int)$_GET['km'])) : 10;
 
 // Carburanti da includere
 $FUEL_NAMES = ['Benzina', 'Gasolio', 'GPL', 'Metano', 'Benzina additivata', 'Gasolio additivato', 'Benzina Speciale'];

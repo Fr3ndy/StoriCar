@@ -36,52 +36,50 @@ let clusterLayer   = null
 let userMarker     = null
 const markers      = {}
 
-// ── GPS automatico se non c'è posizione salvata ────────────────────────────────
+// ── GPS dal client ─────────────────────────────────────────────────────────────
 async function getPosition() {
-  const { lat, lng } = getMapParams()
-  if (lat != null && lng != null) return { lat, lng }
-  // Nessuna posizione salvata: prova GPS
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
-    )
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
-  } catch {
-    return { lat: null, lng: null }
-  }
+  return new Promise((res, rej) =>
+    navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
+  )
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function load(refresh = false) {
+  const base = import.meta.env.VITE_FUEL_PRICES_URL
+  if (!base) {
+    error.value = 'Servizio prezzi non disponibile.'
+    return
+  }
+
   loading.value = true
   error.value   = null
+
   try {
-    const base = import.meta.env.VITE_FUEL_PRICES_URL || './fuel-prices.php'
-    const { lat: settingsLat, lng: settingsLng, km } = getMapParams()
+    const { km } = getMapParams()
 
-    let lat = settingsLat
-    let lng = settingsLng
+    // La posizione la chiede sempre il client via GPS
+    let lat = userLat.value
+    let lng = userLng.value
 
-    // Se non c'è posizione salvata, tenta GPS
     if (lat == null || lng == null) {
-      const gps = await getPosition()
-      lat = gps.lat
-      lng = gps.lng
-      // Aggiorna marker utente se abbiamo GPS
-      if (lat != null) {
+      locating.value = true
+      try {
+        const pos = await getPosition()
+        lat = pos.coords.latitude
+        lng = pos.coords.longitude
         userLat.value = lat
         userLng.value = lng
+      } catch {
+        throw new Error('Posizione non disponibile. Consenti l\'accesso al GPS e riprova.')
+      } finally {
+        locating.value = false
       }
     }
 
-    const params = new URLSearchParams()
-    if (lat != null) params.set('lat', lat)
-    if (lng != null) params.set('lng', lng)
-    params.set('km', km)
+    const params = new URLSearchParams({ lat, lng, km })
     if (refresh) params.set('refresh', '1')
-    const url = `${base}?${params}`
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const res = await fetch(`${base}?${params}`)
+    if (!res.ok) throw new Error(`Errore server (${res.status})`)
     const json = await res.json()
     if (!json.ok) throw new Error(json.error || 'Errore server')
     data.value = json
@@ -171,10 +169,9 @@ async function locateMe() {
 // ── Mappa ─────────────────────────────────────────────────────────────────────
 function initMap() {
   if (!mapContainer.value || map) return
-  const { lat, lng } = getMapParams()
-  const center = (lat != null && lng != null)
-    ? [lat, lng]
-    : (userLat.value != null ? [userLat.value, userLng.value] : [41.90, 12.49])
+  const center = userLat.value != null
+    ? [userLat.value, userLng.value]
+    : [41.90, 12.49] // fallback solo visivo, nessuna richiesta API senza GPS
   map = L.map(mapContainer.value, { zoomControl: true }).setView(center, 12)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',

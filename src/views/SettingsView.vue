@@ -197,56 +197,7 @@ const showRemainingRange = computed({ get: () => getSetting('showRemainingRange'
 const notifyDays        = computed({ get: () => getSetting('notifyDeadlinesDays') ?? 30, set: v => setSetting('notifyDeadlinesDays', Number(v)) })
 
 // Mappa carburanti
-const fuelMapLat    = computed({ get: () => getSetting('fuelMapLat')    ?? null,  set: v => setSetting('fuelMapLat', v) })
-const fuelMapLng    = computed({ get: () => getSetting('fuelMapLng')    ?? null,  set: v => setSetting('fuelMapLng', v) })
-const fuelMapRadius = computed({ get: () => getSetting('fuelMapRadius') ?? 10,    set: v => setSetting('fuelMapRadius', Number(v)) })
-
-const mapLatInput = ref('')
-const mapLngInput = ref('')
-const gpsLocating = ref(false)
-const gpsError    = ref('')
-
-// Inizializza gli input dai valori salvati
-if (fuelMapLat.value != null) mapLatInput.value = String(fuelMapLat.value)
-if (fuelMapLng.value != null) mapLngInput.value = String(fuelMapLng.value)
-
-function applyMapCoords() {
-  const lat = parseFloat(mapLatInput.value)
-  const lng = parseFloat(mapLngInput.value)
-  if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-    fuelMapLat.value = lat
-    fuelMapLng.value = lng
-    gpsError.value = ''
-  } else {
-    gpsError.value = 'Coordinate non valide'
-  }
-}
-
-async function detectMapPosition() {
-  if (!navigator.geolocation) { gpsError.value = 'GPS non supportato'; return }
-  gpsLocating.value = true
-  gpsError.value = ''
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000 })
-    )
-    fuelMapLat.value = parseFloat(pos.coords.latitude.toFixed(5))
-    fuelMapLng.value = parseFloat(pos.coords.longitude.toFixed(5))
-    mapLatInput.value = String(fuelMapLat.value)
-    mapLngInput.value = String(fuelMapLng.value)
-  } catch {
-    gpsError.value = 'Impossibile ottenere la posizione'
-  } finally {
-    gpsLocating.value = false
-  }
-}
-
-function clearMapArea() {
-  fuelMapLat.value = null
-  fuelMapLng.value = null
-  mapLatInput.value = ''
-  mapLngInput.value = ''
-}
+const fuelMapRadius = computed({ get: () => getSetting('fuelMapRadius') ?? 10, set: v => setSetting('fuelMapRadius', Number(v)) })
 
 const fileInput = ref(null)
 const importError = ref('')
@@ -689,55 +640,10 @@ async function resetData() {
     <div class="settings-group">
       <div class="group-title">Mappa carburanti</div>
 
-      <div class="setting-item setting-item-col">
-        <div class="setting-info">
-          <div class="setting-label">Area di riferimento</div>
-          <div class="setting-description">
-            <span v-if="fuelMapLat && fuelMapLng">
-              {{ fuelMapLat }}, {{ fuelMapLng }}
-            </span>
-            <span v-else>Non impostata — verrà usata la posizione GPS al momento della ricerca</span>
-          </div>
-        </div>
-        <div class="map-area-controls">
-          <div class="map-coords-row">
-            <input
-              v-model="mapLatInput"
-              type="number"
-              step="0.00001"
-              class="setting-text-input setting-coord"
-              placeholder="Latitudine"
-              @blur="applyMapCoords"
-            />
-            <input
-              v-model="mapLngInput"
-              type="number"
-              step="0.00001"
-              class="setting-text-input setting-coord"
-              placeholder="Longitudine"
-              @blur="applyMapCoords"
-            />
-          </div>
-          <div class="map-area-btns">
-            <button class="btn btn-sm btn-secondary" @click="detectMapPosition" :disabled="gpsLocating">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:14px;height:14px">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
-              {{ gpsLocating ? 'Rilevamento...' : 'Usa GPS' }}
-            </button>
-            <button v-if="fuelMapLat" class="btn btn-sm btn-secondary" @click="clearMapArea">
-              Rimuovi
-            </button>
-          </div>
-          <div v-if="gpsError" class="map-area-error">{{ gpsError }}</div>
-        </div>
-      </div>
-
       <div class="setting-item">
         <div class="setting-info">
           <div class="setting-label">Raggio di ricerca</div>
-          <div class="setting-description">Distanza massima dal centro area</div>
+          <div class="setting-description">Distanza massima dalla posizione GPS</div>
         </div>
         <div class="notify-input-wrap">
           <input
