@@ -227,7 +227,7 @@ function formatDate(dateStr) {
 <style scoped>
 .map-container {
   height: 350px;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   overflow: hidden;
   z-index: 1;
 }

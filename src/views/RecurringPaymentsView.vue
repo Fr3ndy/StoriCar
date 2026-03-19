@@ -396,7 +396,12 @@ function isExpired(p) {
 <style scoped>
 /* Root container */
 .rp-view {
-  padding-bottom: 100px;
+  padding: 0 0 100px;
+}
+
+.vehicle-selector {
+  padding: 0 16px;
+  margin-bottom: 16px;
 }
 
 /* Summary */
@@ -405,6 +410,7 @@ function isExpired(p) {
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 16px;
+  padding: 0 16px;
 }
 .summary-card {
   background: var(--bg-card);
@@ -417,12 +423,12 @@ function isExpired(p) {
 .summary-lbl { font-size: 10px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
 
 /* Payment cards */
-.payments-list { display: flex; flex-direction: column; gap: 10px; }
+.payments-list { display: flex; flex-direction: column; gap: 10px; padding: 0 16px; }
 
 .payment-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--r-md);
   padding: 14px 16px;
   transition: border-color 0.2s;
 }
@@ -471,7 +477,7 @@ function isExpired(p) {
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  background: var(--primary);
   border-radius: 3px;
   transition: width 0.4s ease;
 }

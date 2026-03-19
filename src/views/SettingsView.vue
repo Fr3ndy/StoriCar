@@ -883,17 +883,16 @@ async function resetData() {
 
 <style scoped>
 .settings-view {
-  padding: 16px;
-  padding-bottom: 100px;
+  padding: 0 0 100px;
 }
 
 /* ── Profilo ── */
 .profile-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--r-md);
   padding: 20px;
-  margin-bottom: 16px;
+  margin: 0 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1159,10 +1158,10 @@ async function resetData() {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: linear-gradient(135deg, #1e40af, #2563eb);
+  background: var(--primary);
   border-radius: 18px;
   padding: 18px 20px;
-  margin-bottom: 16px;
+  margin: 0 16px 16px;
 }
 
 .app-hero-icon {
@@ -1194,13 +1193,13 @@ async function resetData() {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  margin-bottom: 20px;
+  margin: 0 16px 20px;
 }
 
 .summary-item {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   padding: 12px 8px;
   text-align: center;
 }
@@ -1225,8 +1224,8 @@ async function resetData() {
 .settings-group {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  margin-bottom: 14px;
+  border-radius: var(--r-md);
+  margin: 0 16px 14px;
   overflow: hidden;
 }
 

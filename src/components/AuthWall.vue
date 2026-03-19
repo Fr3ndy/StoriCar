@@ -145,19 +145,17 @@ async function login() {
   gap: 10px;
   padding: 14px 16px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--r-md);
   background: var(--primary);
   color: white;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
   margin-bottom: 12px;
 }
 .btn-google:hover {
-  background: var(--primary-dark, #1d4ed8);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+  background: #1d4ed8;
 }
 .google-icon { width: 20px; height: 20px; flex-shrink: 0; }
 

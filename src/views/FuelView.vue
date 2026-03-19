@@ -25,13 +25,11 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
-// Available years from records
 const availableYears = computed(() => {
   const years = [...new Set(allRecords.value.map(r => new Date(r.date).getFullYear()))]
   return years.sort((a, b) => b - a)
 })
 
-// Filtered records
 const fuelRecords = computed(() => {
   let records = allRecords.value
   if (filterYear.value) {
@@ -124,7 +122,7 @@ function editRecord(record) {
 </script>
 
 <template>
-  <div class="view-container">
+  <div class="view-wrap">
 
     <!-- No vehicles -->
     <div v-if="!hasVehicles" class="empty-state">
@@ -138,31 +136,29 @@ function editRecord(record) {
 
     <template v-else>
       <!-- Vehicle selector -->
-      <div class="section-px" style="margin-bottom:12px">
-        <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
-          <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
-          </option>
-        </select>
-      </div>
+      <select class="form-select" style="margin-bottom:10px" :value="selectedVehicleId" @change="onVehicleChange">
+        <option v-for="v in vehicles" :key="v.id" :value="v.id">
+          {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
+        </option>
+      </select>
 
       <!-- Filter bar -->
-      <div class="card filter-card">
-        <div class="filter-header" @click="showFilters = !showFilters">
-          <div class="filter-left">
+      <div class="filter-bar card">
+        <button class="filter-toggle" @click="showFilters = !showFilters">
+          <div class="filter-toggle-left">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="filter-icon">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707l-6.414 6.414A1 1 0 0014 13.828V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-7.172a1 1 0 00-.293-.707L1.293 6.707A1 1 0 011 6V4z" />
             </svg>
-            <span class="filter-label">Filtri</span>
+            <span>Filtri</span>
             <span v-if="hasActiveFilters" class="filter-dot"></span>
           </div>
-          <div class="filter-right">
+          <div class="filter-toggle-right">
             <span class="record-count">{{ fuelRecords.length }} rifornimenti</span>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="chevron" :class="{ rotated: showFilters }">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="chevron-icon" :class="{ rotated: showFilters }">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
-        </div>
+        </button>
 
         <div v-if="showFilters" class="filter-body">
           <div class="filter-row">
@@ -175,12 +171,7 @@ function editRecord(record) {
               <option v-for="m in months" :key="m.value" :value="m.value">{{ m.label }}</option>
             </select>
           </div>
-          <input
-            v-model="filterText"
-            type="text"
-            class="form-input"
-            placeholder="Cerca per indirizzo o note…"
-          />
+          <input v-model="filterText" type="text" class="form-input" placeholder="Cerca per indirizzo o note…" />
           <button v-if="hasActiveFilters" class="btn btn-sm btn-secondary" style="align-self:flex-start" @click="resetFilters">
             Rimuovi filtri
           </button>
@@ -212,11 +203,11 @@ function editRecord(record) {
 
           <!-- Card -->
           <div class="tl-card card">
-            <!-- Header row -->
+            <!-- Top row -->
             <div class="tc-top" @click="editRecord(record)">
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
-              <div class="tc-badges">
-                <span v-if="record.remainingRange != null" class="badge-range" title="Autonomia registrata">⚡</span>
+              <div class="tc-right">
+                <span v-if="record.remainingRange != null" class="tc-range" title="Autonomia registrata">⚡</span>
                 <span
                   v-if="getConsumptionDisplay(record)"
                   class="tc-cons"
@@ -227,12 +218,12 @@ function editRecord(record) {
               </div>
             </div>
 
-            <!-- Details -->
-            <div class="tc-details" @click="editRecord(record)">
-              <span v-if="record.liters">{{ formatNumber(record.liters) }} L</span>
-              <span v-if="record.pricePerLiter">{{ formatNumber(record.pricePerLiter, 3) }} €/L</span>
-              <span v-if="record.kmDriven">{{ Math.round(record.kmDriven).toLocaleString('it-IT') }} km</span>
-              <span v-if="record.odometer">odo {{ Math.round(record.odometer).toLocaleString('it-IT') }}</span>
+            <!-- Details chips -->
+            <div class="tc-chips" @click="editRecord(record)">
+              <span v-if="record.liters" class="tc-chip">{{ formatNumber(record.liters) }} L</span>
+              <span v-if="record.pricePerLiter" class="tc-chip">{{ formatNumber(record.pricePerLiter, 3) }} €/L</span>
+              <span v-if="record.kmDriven" class="tc-chip">{{ Math.round(record.kmDriven).toLocaleString('it-IT') }} km</span>
+              <span v-if="record.odometer" class="tc-chip tc-chip-muted">odo {{ Math.round(record.odometer).toLocaleString('it-IT') }}</span>
             </div>
 
             <!-- Location -->
@@ -248,12 +239,13 @@ function editRecord(record) {
 
             <!-- Actions -->
             <div class="tc-actions">
-              <button class="action-btn" @click="editRecord(record)" title="Modifica">
+              <button class="tc-action-btn" @click="editRecord(record)" title="Modifica">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
+                Modifica
               </button>
-              <button class="action-btn danger" @click="confirmDelete(record)" title="Elimina">
+              <button class="tc-action-btn danger" @click="confirmDelete(record)" title="Elimina">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
@@ -274,257 +266,142 @@ function editRecord(record) {
 </template>
 
 <style scoped>
-.view-container {
-  padding: 16px;
-  padding-bottom: 100px;
+.view-wrap { padding-bottom: 100px; }
+
+/* Filter bar */
+.filter-bar { padding: 12px 14px; margin-bottom: 12px; }
+
+.filter-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; background: none; border: none; cursor: pointer;
+  padding: 0; user-select: none;
 }
 
-.section-px { padding: 0; }
-
-/* Filter card */
-.filter-card {
-  padding: 12px 14px;
-  margin-bottom: 16px;
+.filter-toggle-left {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
 }
 
-.filter-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-}
-
-.filter-left {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.filter-icon {
-  width: 15px;
-  height: 15px;
-  color: var(--primary);
-  flex-shrink: 0;
-}
+.filter-icon { width: 14px; height: 14px; color: var(--primary); flex-shrink: 0; }
 
 .filter-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--primary);
-  flex-shrink: 0;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--primary); flex-shrink: 0;
 }
 
-.filter-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.filter-toggle-right { display: flex; align-items: center; gap: 8px; }
 
-.record-count {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
+.record-count { font-size: 12px; color: var(--text-secondary); }
 
-.chevron {
-  width: 16px;
-  height: 16px;
-  color: var(--text-secondary);
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
+.chevron-icon { width: 15px; height: 15px; color: var(--text-tertiary); transition: transform 0.2s; flex-shrink: 0; }
+.chevron-icon.rotated { transform: rotate(180deg); }
 
-.chevron.rotated { transform: rotate(180deg); }
+.filter-body { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 
-.filter-body {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.filter-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
+.filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 /* Timeline */
-.timeline {
-  display: flex;
-  flex-direction: column;
-}
+.timeline { display: flex; flex-direction: column; }
 
-.tl-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  min-width: 0;
-}
+.tl-item { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
 
 .tl-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 40px;
-  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  align-items: center; width: 40px; flex-shrink: 0;
 }
 
 .tl-date {
-  width: 40px;
-  height: 48px;
+  width: 40px; height: 46px;
   background: var(--bg-card);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
-
-.tl-day {
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--primary);
-}
-
-.tl-month {
-  font-size: 9px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  font-weight: 600;
-}
+.tl-day   { font-size: 16px; font-weight: 800; line-height: 1; color: var(--primary); }
+.tl-month { font-size: 9px; color: var(--text-secondary); text-transform: uppercase;
+  letter-spacing: 0.3px; font-weight: 700; }
 
 .tl-line {
-  width: 2px;
-  flex: 1;
-  background: var(--border);
-  margin: 5px 0;
-  min-height: 12px;
+  width: 1.5px; flex: 1; background: var(--border);
+  margin: 4px 0; min-height: 12px;
 }
 
 /* Timeline card */
 .tl-card {
-  flex: 1;
-  min-width: 0;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  overflow: hidden;
+  flex: 1; min-width: 0;
+  padding: 12px 14px; margin-bottom: 10px; overflow: hidden;
 }
 
 .tc-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; cursor: pointer;
 }
+.tc-amount { font-size: 19px; font-weight: 800; color: var(--text-primary); }
 
-.tc-amount {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text-primary);
-}
+.tc-right { display: flex; align-items: center; gap: 6px; }
 
-.tc-badges {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.badge-range {
-  font-size: 12px;
-  opacity: 0.7;
-}
+.tc-range { font-size: 12px; opacity: 0.6; }
 
 .tc-cons {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px;
+  background: var(--bg-secondary); color: var(--text-secondary);
+}
+.cons-good { background: rgba(16,185,129,0.10); color: #10b981; }
+.cons-avg  { background: rgba(245,158,11,0.10); color: #f59e0b; }
+.cons-poor { background: rgba(239,68,68,0.10);  color: #ef4444; }
+
+/* Detail chips */
+.tc-chips {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 6px; cursor: pointer;
+}
+.tc-chip {
+  font-size: 12px; font-weight: 600;
+  padding: 3px 8px; border-radius: 20px;
   background: var(--bg-secondary);
   color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
+.tc-chip-muted { opacity: 0.6; }
 
-.cons-good { background: rgba(16,185,129,0.12); color: #10b981; }
-.cons-avg  { background: rgba(245,158,11,0.12);  color: #f59e0b; }
-.cons-poor { background: rgba(239,68,68,0.12);   color: #ef4444; }
-
-.tc-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-  cursor: pointer;
-}
-
+/* Location */
 .tc-location {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 5px;
-  min-width: 0;
-  cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-secondary);
+  margin-top: 4px; min-width: 0; cursor: pointer;
 }
+.tc-location svg { width: 11px; height: 11px; flex-shrink: 0; color: var(--primary); }
+.tc-location span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
-.tc-location svg {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
-}
+.tc-notes { font-size: 12px; color: var(--text-tertiary); font-style: italic; margin-top: 4px; cursor: pointer; }
 
-.tc-location span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-.tc-notes {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-style: italic;
-  margin-top: 5px;
-  cursor: pointer;
-}
-
+/* Actions */
 .tc-actions {
-  display: flex;
-  gap: 4px;
+  display: flex; align-items: center; gap: 6px;
   justify-content: flex-end;
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 10px; padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: none;
+.tc-action-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
 }
-
-.action-btn svg { width: 15px; height: 15px; }
-.action-btn:active { transform: scale(0.9); }
-.action-btn.danger { color: var(--danger); }
-.action-btn.danger:active { background: rgba(239,68,68,0.1); }
+.tc-action-btn svg { width: 13px; height: 13px; }
+.tc-action-btn:active { opacity: .8; }
+.tc-action-btn.danger {
+  color: var(--danger);
+  background: rgba(239,68,68,0.06);
+  border-color: rgba(239,68,68,0.2);
+  padding: 5px 8px;
+}
+.tc-action-btn.danger:active { background: rgba(239,68,68,0.12); }
 </style>

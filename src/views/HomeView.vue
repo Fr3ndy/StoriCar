@@ -54,7 +54,7 @@ function fmt(num, dec = 2) {
 }
 function fmtCur(num) {
   if (num == null || isNaN(num)) return '—'
-  return fmt(num) + ' €'
+  return '€\u00a0' + fmt(num)
 }
 
 const upcomingDeadlines = computed(() => {
@@ -90,9 +90,9 @@ function dlStatus(dl) {
 
 function dlLabel(dl) {
   const d = dlDays(dl.expiryDate)
-  if (d < 0) return `Scaduta da ${Math.abs(d)} gg`
-  if (d === 0) return 'Scade oggi!'
-  return `${d} gg`
+  if (d < 0) return `Scaduta ${Math.abs(d)}gg fa`
+  if (d === 0) return 'Scade oggi'
+  return `${d} giorni`
 }
 </script>
 
@@ -104,88 +104,77 @@ function dlLabel(dl) {
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
       </svg>
-      <h2>Benvenuto in Storicar!</h2>
-      <p>Aggiungi il tuo primo veicolo per iniziare a tracciare le spese</p>
-      <button class="btn btn-primary btn-block" style="margin-top:20px;max-width:240px" @click="router.push('/vehicles')">
+      <h2>Benvenuto in Storicar</h2>
+      <p>Aggiungi il tuo primo veicolo per iniziare</p>
+      <button class="btn btn-primary" style="margin-top:20px" @click="router.push('/vehicles')">
         Aggiungi veicolo
       </button>
     </div>
 
     <!-- ── Dashboard ── -->
-    <div v-else>
+    <div v-else class="dashboard">
 
-      <!-- Hero card -->
-      <div class="hero-card">
-        <div class="hero-top">
-          <div>
-            <div class="hero-name">{{ stats.vehicle.value?.name || 'Veicolo' }}</div>
-            <div class="hero-sub">
-              {{ [stats.vehicle.value?.brand, stats.vehicle.value?.model, stats.vehicle.value?.year].filter(Boolean).join(' ') }}
-              <span v-if="stats.vehicle.value?.plate"> · {{ stats.vehicle.value.plate }}</span>
-            </div>
-          </div>
-          <div class="hero-icon">
+      <!-- Vehicle card -->
+      <div class="vehicle-card">
+        <div class="vc-top">
+          <div class="vc-icon">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
             </svg>
           </div>
+          <div class="vc-info">
+            <div class="vc-name">{{ stats.vehicle.value?.name || 'Veicolo' }}</div>
+            <div class="vc-sub">
+              {{ [stats.vehicle.value?.brand, stats.vehicle.value?.model].filter(Boolean).join(' ') }}
+              <template v-if="stats.vehicle.value?.plate"> · <strong>{{ stats.vehicle.value.plate }}</strong></template>
+            </div>
+          </div>
+          <svg class="vc-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
         </div>
-        <div class="hero-odo">
-          <span class="hero-odo-value">{{ stats.lastOdometer.value > 0 ? stats.lastOdometer.value.toLocaleString('it-IT') : '—' }}</span>
-          <span class="hero-odo-unit">km</span>
+        <div class="vc-odo">
+          <span class="vc-odo-num">{{ stats.lastOdometer.value > 0 ? stats.lastOdometer.value.toLocaleString('it-IT') : '—' }}</span>
+          <span class="vc-odo-unit">km</span>
         </div>
-        <!-- Invisible select per cambio veicolo -->
-        <select class="hero-select" :value="selectedVehicleId" @change="onVehicleChange">
+        <!-- invisible select for vehicle switching -->
+        <select class="vc-select" :value="selectedVehicleId" @change="onVehicleChange">
           <option v-for="v in vehicles" :key="v.id" :value="v.id">
             {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
           </option>
         </select>
       </div>
 
-      <!-- Fuel prices widget -->
-      <div v-if="prezziWidget.length" class="prices-widget" @click="router.push('/fuel-prices')">
-        <div class="prices-header">
-          <div class="prices-label">
+      <!-- Quick actions -->
+      <div class="actions-grid">
+        <button class="action-tile primary" @click="router.push('/fuel/add')">
+          <div class="action-tile-icon">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-            Prezzi area Cagliari
           </div>
-          <span class="prices-link">Vedi mappa →</span>
-        </div>
-        <div class="prices-row">
-          <div v-for="p in prezziWidget" :key="p.nome" class="prices-item">
-            <div class="prices-nome">{{ p.nome }}</div>
-            <div class="prices-val">{{ p.min.toFixed(3).replace('.', ',') }}<span> €/L</span></div>
-            <div class="prices-media">media {{ p.media.toFixed(3).replace('.', ',') }}</div>
+          <span>Rifornimento</span>
+        </button>
+        <button class="action-tile" @click="router.push('/expenses/add')">
+          <div class="action-tile-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+            </svg>
           </div>
-        </div>
-      </div>
-
-      <!-- Quick actions -->
-      <div class="quick-row">
-        <button class="quick-btn primary" @click="router.push('/fuel/add')">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-          </svg>
-          Rifornimento
+          <span>Spesa</span>
         </button>
-        <button class="quick-btn" @click="router.push('/expenses/add')">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-          </svg>
-          Spesa
-        </button>
-        <button class="quick-btn" @click="router.push('/map')">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-          Mappa
+        <button class="action-tile" @click="router.push('/map')">
+          <div class="action-tile-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <span>Mappa</span>
         </button>
       </div>
 
-      <!-- Stats 2×2 -->
+      <!-- Stats grid -->
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-icon stat-icon-primary">
@@ -203,7 +192,7 @@ function dlLabel(dl) {
             </svg>
           </div>
           <div class="stat-value">{{ fmtCur(stats.totalFuelSpent.value) }}</div>
-          <div class="stat-label">Speso Carb.</div>
+          <div class="stat-label">Carburante</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon stat-icon-green">
@@ -212,7 +201,7 @@ function dlLabel(dl) {
             </svg>
           </div>
           <div class="stat-value">{{ fmt(stats.totalKmDriven.value, 0) }}</div>
-          <div class="stat-label">Km Percorsi</div>
+          <div class="stat-label">Km percorsi</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon stat-icon-red">
@@ -221,75 +210,103 @@ function dlLabel(dl) {
             </svg>
           </div>
           <div class="stat-value">{{ fmtCur(stats.totalSpent.value) }}</div>
-          <div class="stat-label">Totale</div>
+          <div class="stat-label">Totale speso</div>
         </div>
       </div>
 
       <!-- Scadenze imminenti -->
-      <div v-if="upcomingDeadlines.length > 0" class="card">
-        <div class="card-header">
-          <h3 class="card-title">⚠️ Scadenze</h3>
-          <button class="btn btn-sm btn-secondary" @click="router.push('/deadlines')">Vedi tutte</button>
+      <div v-if="upcomingDeadlines.length > 0" class="section">
+        <div class="section-header">
+          <span class="section-title">Scadenze</span>
+          <button class="section-link" @click="router.push('/deadlines')">Vedi tutte</button>
         </div>
-        <div
-          v-for="dl in upcomingDeadlines"
-          :key="dl.id"
-          class="dl-row"
-          @click="router.push('/deadlines')"
-        >
-          <span class="dl-icon">{{ dlLabels[dl.type]?.icon || '📌' }}</span>
-          <div class="dl-content">
-            <span class="dl-label">{{ dlLabels[dl.type]?.label || dl.type }}</span>
-            <span v-if="dl.description" class="dl-desc"> — {{ dl.description }}</span>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div
+            v-for="(dl, i) in upcomingDeadlines"
+            :key="dl.id"
+            class="dl-row"
+            :class="{ 'dl-row-last': i === upcomingDeadlines.length - 1 }"
+            @click="router.push('/deadlines')"
+          >
+            <span class="dl-emoji">{{ dlLabels[dl.type]?.icon || '📌' }}</span>
+            <div class="dl-info">
+              <div class="dl-name">{{ dlLabels[dl.type]?.label || dl.type }}</div>
+              <div v-if="dl.description" class="dl-desc">{{ dl.description }}</div>
+            </div>
+            <span class="dl-badge" :class="dlStatus(dl)">{{ dlLabel(dl) }}</span>
           </div>
-          <span class="dl-badge" :class="dlStatus(dl)">{{ dlLabel(dl) }}</span>
         </div>
       </div>
 
       <!-- Ultimi rifornimenti -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Ultimi rifornimenti</h3>
-          <button class="btn btn-sm btn-secondary" @click="router.push('/fuel')">Vedi tutti</button>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Ultimi rifornimenti</span>
+          <button class="section-link" @click="router.push('/fuel')">Vedi tutti</button>
         </div>
-        <div v-if="stats.fuelRecords.value.length === 0" class="empty-section">
+        <div v-if="stats.fuelRecords.value.length === 0" class="card" style="text-align:center;color:var(--text-secondary);font-size:14px;padding:20px">
           Nessun rifornimento registrato
         </div>
-        <div
-          v-for="r in stats.fuelRecords.value.slice(0, 3)"
-          :key="r.id"
-          class="fuel-row"
-          @click="router.push(`/fuel/edit/${r.id}`)"
-        >
-          <div class="fuel-date">{{ new Date(r.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }) }}</div>
-          <div class="fuel-content">
-            <div class="fuel-main">{{ fmtCur(r.amount) }} · {{ fmt(r.liters) }} L</div>
-            <div class="fuel-sub">{{ fmt(r.pricePerLiter, 3) }} €/L<span v-if="r.kmDriven"> · {{ Math.round(r.kmDriven) }} km</span></div>
+        <div v-else class="card" style="padding:0;overflow:hidden">
+          <div
+            v-for="(r, i) in stats.fuelRecords.value.slice(0, 3)"
+            :key="r.id"
+            class="fuel-row"
+            :class="{ 'fuel-row-last': i === Math.min(stats.fuelRecords.value.length, 3) - 1 }"
+            @click="router.push(`/fuel/edit/${r.id}`)"
+          >
+            <div class="fuel-date-box">
+              <span class="fuel-day">{{ new Date(r.date).getDate().toString().padStart(2,'0') }}</span>
+              <span class="fuel-month">{{ new Date(r.date).toLocaleDateString('it-IT', { month:'short' }) }}</span>
+            </div>
+            <div class="fuel-info">
+              <div class="fuel-main">{{ fmtCur(r.amount) }}</div>
+              <div class="fuel-sub">{{ fmt(r.liters) }} L · {{ fmt(r.pricePerLiter, 3) }} €/L<span v-if="r.kmDriven"> · {{ Math.round(r.kmDriven) }} km</span></div>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="fuel-chevron">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px;color:var(--text-secondary);flex-shrink:0">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
         </div>
       </div>
 
       <!-- Riepilogo consumi -->
-      <div class="card">
-        <h3 class="card-title" style="margin-bottom:12px">Riepilogo consumi</h3>
-        <div class="list-item">
-          <span>Costo per km</span>
-          <strong>{{ fmt(stats.costPerKm.value, 3) }} €/km</strong>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Consumi</span>
         </div>
-        <div class="list-item">
-          <span>Prezzo medio carburante</span>
-          <strong>{{ fmt(stats.averagePricePerLiter.value, 3) }} €/L</strong>
+        <div class="card">
+          <div class="list-item">
+            <span>Costo per km</span>
+            <strong class="list-item-value">{{ fmt(stats.costPerKm.value, 3) }} €/km</strong>
+          </div>
+          <div class="list-item">
+            <span>Prezzo medio carb.</span>
+            <strong class="list-item-value">{{ fmt(stats.averagePricePerLiter.value, 3) }} €/L</strong>
+          </div>
+          <div class="list-item">
+            <span>Spesa media mensile</span>
+            <strong class="list-item-value">{{ fmtCur(stats.averageFuelSpentPerMonth.value) }}</strong>
+          </div>
+          <div class="list-item">
+            <span>Totale litri</span>
+            <strong class="list-item-value">{{ fmt(stats.totalLiters.value) }} L</strong>
+          </div>
         </div>
-        <div class="list-item">
-          <span>Spesa media mensile</span>
-          <strong>{{ fmtCur(stats.averageFuelSpentPerMonth.value) }}</strong>
+      </div>
+
+      <!-- Fuel prices widget -->
+      <div v-if="prezziWidget.length" class="section">
+        <div class="section-header">
+          <span class="section-title">Prezzi area Cagliari</span>
+          <button class="section-link" @click="router.push('/fuel-prices')">Mappa →</button>
         </div>
-        <div class="list-item">
-          <span>Totale litri</span>
-          <strong>{{ fmt(stats.totalLiters.value) }} L</strong>
+        <div class="prices-strip" @click="router.push('/fuel-prices')">
+          <div v-for="p in prezziWidget" :key="p.nome" class="prices-item">
+            <div class="prices-nome">{{ p.nome }}</div>
+            <div class="prices-val">{{ p.min.toFixed(3).replace('.', ',') }}<span>€/L</span></div>
+            <div class="prices-media">media {{ p.media.toFixed(3).replace('.', ',') }}</div>
+          </div>
         </div>
       </div>
 
@@ -298,143 +315,175 @@ function dlLabel(dl) {
 </template>
 
 <style scoped>
-/* ── Hero card ── */
-.hero-card {
-  background: linear-gradient(135deg, #1e40af, #2563eb);
-  color: white;
-  border-radius: 20px;
-  padding: 20px;
-  margin-bottom: 12px;
+.dashboard { display: flex; flex-direction: column; }
+
+/* ── Vehicle card ── */
+.vehicle-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  margin-bottom: 10px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 6px 24px rgba(37,99,235,0.3);
-}
-[data-theme="dark"] .hero-card {
-  background: linear-gradient(135deg, #0f2456, #1d3a8a);
+  box-shadow: var(--shadow-sm);
 }
 
-.hero-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+.vc-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 
-.hero-name { font-size: 20px; font-weight: 800; line-height: 1.2; }
-.hero-sub  { font-size: 13px; opacity: .75; margin-top: 3px; }
-
-.hero-icon {
-  width: 44px; height: 44px;
-  background: rgba(255,255,255,0.15);
-  border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+.vc-icon {
+  width: 42px; height: 42px;
+  border-radius: var(--r);
+  background: var(--primary-soft); color: var(--primary);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.hero-icon svg { width: 24px; height: 24px; }
+[data-theme="dark"] .vc-icon { background: var(--primary-glow); color: #93c5fd; }
+.vc-icon svg { width: 22px; height: 22px; }
 
-.hero-odo { display: flex; align-items: baseline; gap: 6px; }
-.hero-odo-value { font-size: 38px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
-.hero-odo-unit  { font-size: 16px; opacity: .7; font-weight: 600; }
+.vc-info { flex: 1; min-width: 0; }
+.vc-name { font-size: 16px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.vc-sub  { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.vc-sub strong { font-weight: 700; color: var(--text-primary); }
 
-.hero-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; }
+.vc-chevron { width: 16px; height: 16px; color: var(--text-tertiary); flex-shrink: 0; }
 
-/* ── Fuel prices widget ── */
-.prices-widget {
-  background: linear-gradient(135deg, #0f172a, #1e3a5f);
-  border-radius: 16px;
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  transition: opacity .15s;
-}
-.prices-widget:active { opacity: .85; }
+.vc-odo { display: flex; align-items: baseline; gap: 5px; }
+.vc-odo-num { font-size: 40px; font-weight: 900; color: var(--text-primary); letter-spacing: -2px; line-height: 1; }
+.vc-odo-unit { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
 
-.prices-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
-}
-.prices-label {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; font-weight: 700;
-  color: rgba(255,255,255,.6);
-  text-transform: uppercase; letter-spacing: .5px;
-}
-.prices-label svg { width: 13px; height: 13px; color: #60a5fa; }
-.prices-link { font-size: 11px; color: #60a5fa; font-weight: 600; }
-
-.prices-row { display: flex; gap: 8px; }
-.prices-item { flex: 1; background: rgba(255,255,255,.07); border-radius: 10px; padding: 8px 10px; }
-.prices-nome { font-size: 9px; color: rgba(255,255,255,.45); font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
-.prices-val  { font-size: 18px; font-weight: 800; color: #86efac; letter-spacing: -.5px; line-height: 1.1; }
-.prices-val span { font-size: 10px; color: rgba(255,255,255,.4); font-weight: 600; }
-.prices-media { font-size: 10px; color: rgba(255,255,255,.35); margin-top: 2px; }
+.vc-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; }
 
 /* ── Quick actions ── */
-.quick-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.actions-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
 
-.quick-btn {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 14px 8px;
-  border-radius: 14px;
-  border: 1.5px solid var(--border);
+.action-tile {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px; padding: 16px 8px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 11px; font-weight: 600;
-  cursor: pointer;
-  transition: all .15s;
-  box-shadow: 0 1px 4px var(--shadow);
+  cursor: pointer; transition: all .15s;
+  box-shadow: var(--shadow-sm);
 }
-.quick-btn svg { width: 22px; height: 22px; }
-.quick-btn:active { transform: scale(.95); }
-.quick-btn:hover { border-color: var(--primary); color: var(--primary); }
+.action-tile:active { transform: scale(.96); opacity: .85; }
 
-.quick-btn.primary {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  color: white; border-color: transparent;
-  box-shadow: 0 3px 12px rgba(37,99,235,.35);
+.action-tile-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--r);
+  background: var(--bg-secondary);
+  display: flex; align-items: center; justify-content: center;
 }
-.quick-btn.primary:hover { box-shadow: 0 4px 16px rgba(37,99,235,.45); }
+.action-tile-icon svg { width: 18px; height: 18px; }
+
+.action-tile.primary {
+  background: var(--primary); color: white;
+  border-color: transparent;
+  box-shadow: 0 3px 12px rgba(37,99,235,.28);
+}
+.action-tile.primary .action-tile-icon { background: rgba(255,255,255,0.18); }
+
+/* ── Sections ── */
+.section { margin-bottom: 10px; }
+
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; padding: 0 2px;
+}
+.section-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.section-link {
+  font-size: 12px; font-weight: 600; color: var(--primary);
+  background: none; border: none; cursor: pointer; padding: 0;
+}
+.section-link:active { opacity: .7; }
 
 /* ── Deadlines ── */
 .dl-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 0; border-bottom: 1px solid var(--border);
-  cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .12s;
 }
-.dl-row:last-child { border-bottom: none; }
-.dl-icon { font-size: 18px; flex-shrink: 0; }
-.dl-content { flex: 1; font-size: 14px; }
-.dl-label { font-weight: 500; }
-.dl-desc  { color: var(--text-secondary); font-size: 13px; }
+.dl-row:active { background: var(--bg-secondary); }
+.dl-row-last { border-bottom: none; }
+
+.dl-emoji { font-size: 18px; flex-shrink: 0; line-height: 1; }
+.dl-info  { flex: 1; min-width: 0; }
+.dl-name  { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.dl-desc  { font-size: 12px; color: var(--text-secondary); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .dl-badge {
-  font-size: 11px; font-weight: 700;
-  padding: 3px 8px; border-radius: 8px;
-  white-space: nowrap;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px;
+  white-space: nowrap; flex-shrink: 0;
+  background: var(--bg-secondary); color: var(--text-secondary);
 }
-.dl-badge.expiring { background: #fef3c7; color: #b45309; }
-.dl-badge.expired  { background: #fee2e2; color: #b91c1c; }
-[data-theme="dark"] .dl-badge.expiring { background: #451a03; color: #fcd34d; }
-[data-theme="dark"] .dl-badge.expired  { background: #450a0a; color: #fca5a5; }
+.dl-badge.expiring { background: rgba(245,158,11,0.12); color: #b45309; }
+.dl-badge.expired  { background: rgba(239,68,68,0.10);  color: #b91c1c; }
+[data-theme="dark"] .dl-badge.expiring { background: rgba(245,158,11,0.15); color: #fcd34d; }
+[data-theme="dark"] .dl-badge.expired  { background: rgba(239,68,68,0.12);  color: #fca5a5; }
 
 /* ── Fuel rows ── */
 .fuel-row {
   display: flex; align-items: center; gap: 12px;
-  padding: 10px 0; border-bottom: 1px solid var(--border);
-  cursor: pointer;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .12s;
 }
-.fuel-row:last-child { border-bottom: none; }
+.fuel-row:active { background: var(--bg-secondary); }
+.fuel-row-last { border-bottom: none; }
 
-.fuel-date {
-  font-size: 11px; font-weight: 700; color: var(--primary);
-  background: var(--primary-glow);
-  padding: 4px 8px; border-radius: 8px;
-  white-space: nowrap; flex-shrink: 0;
+.fuel-date-box {
+  width: 38px; height: 44px;
+  background: var(--bg-secondary);
+  border-radius: var(--r); border: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; flex-shrink: 0;
 }
-.fuel-content { flex: 1; }
-.fuel-main { font-size: 14px; font-weight: 600; }
+.fuel-day   { font-size: 16px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+.fuel-month { font-size: 9px; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
+
+.fuel-info { flex: 1; min-width: 0; }
+.fuel-main { font-size: 15px; font-weight: 700; color: var(--text-primary); }
 .fuel-sub  { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
-/* ── Empty section ── */
-.empty-section {
-  text-align: center; padding: 20px 0;
-  color: var(--text-secondary); font-size: 14px;
+.fuel-chevron { width: 14px; height: 14px; color: var(--text-tertiary); flex-shrink: 0; }
+
+/* ── Prices strip ── */
+.prices-strip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex; overflow: hidden;
+  cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: opacity .15s;
 }
+.prices-strip:active { opacity: .85; }
+
+.prices-item {
+  flex: 1; padding: 14px 12px;
+  border-right: 1px solid var(--border);
+}
+.prices-item:last-child { border-right: none; }
+
+.prices-nome {
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-tertiary); margin-bottom: 4px;
+}
+.prices-val {
+  font-size: 17px; font-weight: 800;
+  color: var(--primary); letter-spacing: -0.5px; line-height: 1.1;
+}
+.prices-val span { font-size: 10px; color: var(--text-tertiary); font-weight: 600; margin-left: 2px; }
+.prices-media { font-size: 10px; color: var(--text-secondary); margin-top: 3px; }
 </style>

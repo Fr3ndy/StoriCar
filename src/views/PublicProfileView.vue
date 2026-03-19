@@ -196,7 +196,7 @@ const copied = ref(false)
 .btn-back {
   margin-top: 8px;
   padding: 10px 20px;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   border: 1.5px solid var(--border);
   background: none;
   color: var(--text-primary);
@@ -222,7 +222,7 @@ const copied = ref(false)
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(135deg, #1e40af, #2563eb);
+  background: var(--primary);
   border-radius: 20px;
   padding: 28px 20px 24px;
   text-align: center;

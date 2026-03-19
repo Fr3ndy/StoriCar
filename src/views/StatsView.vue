@@ -918,13 +918,13 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
 
 <style scoped>
 .stats-view {
-  padding: 16px;
-  padding-bottom: 100px;
+  padding: 0 0 100px;
 }
 
 /* ── Period filter ── */
 .period-filter {
   margin-bottom: 16px;
+  padding: 0 16px;
 }
 
 .filter-chips {
@@ -988,10 +988,11 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 20px;
+  padding: 0 16px;
 }
 
 .hero-card {
-  border-radius: 16px;
+  border-radius: var(--r-md);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1021,13 +1022,13 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
 }
 .hero-label { font-size: 11px; color: rgba(255,255,255,0.75); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
 
-.hero-blue  { background: linear-gradient(135deg, #1e40af, #2563eb); }
-.hero-sky   { background: linear-gradient(135deg, #0284c7, #0ea5e9); }
-.hero-green { background: linear-gradient(135deg, #10b981, #059669); }
-.hero-amber { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.hero-blue  { background: var(--primary); }
+.hero-sky   { background: #0ea5e9; }
+.hero-green { background: #10b981; }
+.hero-amber { background: #f59e0b; }
 
 /* ── Sections ── */
-.section { margin-bottom: 24px; }
+.section { margin-bottom: 24px; padding: 0 16px; }
 
 .section-header {
   display: flex;
@@ -1225,7 +1226,7 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
 /* ── Forecast banner ── */
 .forecast-banner {
   display: flex;
-  background: linear-gradient(135deg, #1e40af, #0ea5e9);
+  background: #0ea5e9;
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 10px;
