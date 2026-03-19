@@ -17,7 +17,7 @@ header('Access-Control-Allow-Methods: GET');
 
 define('CACHE_DIR', __DIR__ . '/cache');
 define('CACHE_TTL', 3600); // 1 ora
-define('REFRESH_COOLDOWN', 300); // Cooldown tra refresh forzati: 5 minuti
+define('REFRESH_COOLDOWN', 30); // Cooldown tra refresh forzati: 5 minuti
 
 define('API_URL', 'https://carburanti.mise.gov.it/ospzApi/search/zone');
 

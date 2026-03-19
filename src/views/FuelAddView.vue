@@ -279,7 +279,7 @@ const canSave = computed(() =>
         </span>
       </div>
 
-      <div class="form-row">
+      <!-- <div class="form-row"> -->
         <div class="form-group">
           <label class="form-label">Contakm attuale *</label>
           <input
@@ -330,7 +330,7 @@ const canSave = computed(() =>
             />
           </div>
         -->
-      </div>
+      <!-- </div> -->
 
       <!-- Km driven display -->
       <div class="form-group">

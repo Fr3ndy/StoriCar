@@ -19,6 +19,7 @@ const routes = [
   { path: '/map', name: 'map', component: () => import('./views/MapView.vue') },
   { path: '/fuel-prices', name: 'fuel-prices', component: () => import('./views/FuelPricesView.vue') },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+  { path: '/changelog', name: 'changelog', component: () => import('./views/ChangelogView.vue') },
   { path: '/u/:username', name: 'public-profile', component: () => import('./views/PublicProfileView.vue'), meta: { public: true } },
 ]
 
