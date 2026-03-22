@@ -534,9 +534,9 @@ body {
 .toggle.disabled { opacity: 0.4; }
 
 /* ══════════════════════════════════════
-   Theme toggle button (in header)
+   Settings button (in header)
    ══════════════════════════════════════ */
-.theme-toggle {
+.header-settings-btn {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-secondary);
@@ -548,8 +548,9 @@ body {
   justify-content: center;
   transition: all 0.15s;
 }
-.theme-toggle:active { background: var(--border); }
-.theme-toggle svg { width: 18px; height: 18px; }
+.header-settings-btn:active { background: var(--border); }
+.header-settings-btn.active { color: var(--primary); border-color: var(--primary-soft); background: var(--primary-soft); }
+.header-settings-btn svg { width: 18px; height: 18px; }
 
 /* ══════════════════════════════════════
    Map

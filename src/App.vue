@@ -97,12 +97,10 @@ onMounted(() => {
         <div class="header-dot"></div>
         <h1>{{ pageTitle }}</h1>
       </div>
-      <button class="theme-toggle" @click="toggleTheme" :title="currentTheme === 'light' ? 'Tema scuro' : 'Tema chiaro'">
-        <svg v-if="currentTheme === 'light'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-        </svg>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+      <button class="header-settings-btn" @click="router.push('/settings')" title="Impostazioni" :class="{ active: route.name === 'settings' }">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
         </svg>
       </button>
     </header>
@@ -117,12 +115,6 @@ onMounted(() => {
       </div>
     </Transition>
 
-    <!-- ── Beta banner ── -->
-    <div v-if="isShell" class="beta-banner">
-      <span class="beta-pill">Beta</span>
-      <span>I dati potrebbero subire variazioni senza preavviso.</span>
-    </div>
-
     <!-- ── Main content ── -->
     <main class="main-content">
       <div v-if="isShell && !dataReady" class="flex items-center justify-center min-h-40">
@@ -130,6 +122,12 @@ onMounted(() => {
       </div>
       <router-view v-else />
     </main>
+
+    <!-- ── Beta banner ── -->
+    <div v-if="isShell" class="beta-banner">
+      <span class="beta-pill">Beta</span>
+      <span>I dati potrebbero subire variazioni senza preavviso.</span>
+    </div>
 
     <!-- ── Bottom nav ── -->
     <nav v-if="isShell" class="bottom-nav">
@@ -325,7 +323,7 @@ onMounted(() => {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 16px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   font-size: 11px; color: var(--text-secondary); line-height: 1.4;
 }
 .beta-pill {
