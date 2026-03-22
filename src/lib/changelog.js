@@ -27,7 +27,8 @@ export const changelog = [
       { type: 'improved', text: 'Sezione "Prezzi area" ridisegnata: righe per famiglia con min/media/max, cliccabili' },
       { type: 'improved', text: 'Nomi carburanti aggiornati ai nomi esatti API MIMIT (inclusi premium brand-specific)' },
       { type: 'improved', text: 'Zoom mappa spostato in alto a destra per non sovrapporsi ai chip' },
-      { type: 'fixed', text: 'Calcolo consumo per rifornimento: usa i litri del rifornimento precedente, non quello attuale' },
+      { type: 'fixed', text: 'Calcolo consumo fill-to-fill: km/L calcolato solo tra due pieni completi, sommando i litri dei parziali intermedi — eliminati valori anomali come 25,9 km/L' },
+      { type: 'new', text: 'Toggle "Pieno completo" nel form rifornimento (default: parziale): i parziali mostrano un badge viola invece del consumo' },
     ]
   },
   {

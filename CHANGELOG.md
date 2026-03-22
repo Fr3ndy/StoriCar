@@ -25,7 +25,8 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/).
 - Sezione "Prezzi area" completamente ridisegnata: lista per famiglia con min/media/max e numero impianti, cliccabile per cambiare carburante sulla mappa
 
 ### Corretto
-- Calcolo consumo per rifornimento: ora usa i litri del rifornimento *precedente* (non quello attuale), che corrisponde al carburante effettivamente consumato per percorrere quei km — i valori anomali (es. 25,9 km/L) sono eliminati
+- Calcolo consumo con metodo fill-to-fill: il consumo (km/L) è calcolato solo tra due rifornimenti a "pieno completo", sommando i litri di tutti i parziali intermedi — i valori anomali (es. 25,9 km/L) sono eliminati
+- Aggiunto toggle "Pieno completo" nel form di aggiunta rifornimento (default: parziale); i rifornimenti parziali mostrano un badge "parziale" al posto del consumo
 
 ---
 

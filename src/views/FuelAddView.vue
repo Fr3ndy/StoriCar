@@ -42,7 +42,7 @@ const form = ref({
   pricePerLiter: '',
   odometer: '',
   remainingRange: '',
-  fullTank: true,
+  fullTank: false,
   notes: '',
   location: null,
   address: ''
