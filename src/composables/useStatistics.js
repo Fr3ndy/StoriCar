@@ -196,16 +196,24 @@ export function useStatistics(vehicleId, filters = null) {
     fuelRecords.value.slice().reverse().map(r => ({ date: r.date, price: r.pricePerLiter }))
   )
 
-  const consumptionHistory = computed(() =>
-    recordsWithEffectiveKm.value
-      .filter(r => r.effectiveKm && r.liters)
-      .map(r => ({
-        date: r.date,
-        consumption: consumptionUnit.value === 'L100km'
-          ? (r.liters / r.effectiveKm) * 100
-          : r.effectiveKm / r.liters
-      }))
-  )
+  // Consumo calcolato con litri del rifornimento PRECEDENTE:
+  // i litri messi al rifornimento N sono quelli consumati per percorrere i km da N a N+1
+  const consumptionHistory = computed(() => {
+    const asc = recordsWithEffectiveKm.value // ordinati dal più vecchio
+    return asc
+      .map((r, i) => {
+        if (i === 0) return null // primo record: nessun precedente
+        const prevLiters = asc[i - 1].liters
+        if (!r.effectiveKm || !prevLiters) return null
+        return {
+          date: r.date,
+          consumption: consumptionUnit.value === 'L100km'
+            ? (prevLiters / r.effectiveKm) * 100
+            : r.effectiveKm / prevLiters
+        }
+      })
+      .filter(Boolean)
+  })
 
   const monthlySpending = computed(() => {
     const monthly = {}
@@ -304,21 +312,26 @@ export function useStatistics(vehicleId, filters = null) {
   })
 
   // ── Lista rifornimenti con consumo calcolato ──
+  // consumo = km percorsi da N-1 a N / litri messi a N-1
   const detailedFuelList = computed(() => {
-    return recordsWithEffectiveKm.value
+    const asc = recordsWithEffectiveKm.value // ordinati dal più vecchio
+    return asc
+      .map((r, i) => {
+        const prevLiters = i > 0 ? asc[i - 1].liters : null
+        return {
+          ...r,
+          computedConsumption: r.effectiveKm && prevLiters
+            ? consumptionUnit.value === 'L100km'
+              ? (prevLiters / r.effectiveKm) * 100
+              : r.effectiveKm / prevLiters
+            : null,
+          costPerKm: r.effectiveKm && r.amount
+            ? r.amount / r.effectiveKm
+            : null
+        }
+      })
       .slice()
-      .reverse()
-      .map(r => ({
-        ...r,
-        computedConsumption: r.effectiveKm && r.liters
-          ? consumptionUnit.value === 'L100km'
-            ? (r.liters / r.effectiveKm) * 100
-            : r.effectiveKm / r.liters
-          : null,
-        costPerKm: r.effectiveKm && r.amount
-          ? r.amount / r.effectiveKm
-          : null
-      }))
+      .reverse() // desc per la visualizzazione
   })
 
   // ── Efficienza nel tempo: migliorata o peggiorata ──

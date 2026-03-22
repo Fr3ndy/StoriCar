@@ -25,6 +25,19 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
+// Map recordId → litri del rifornimento precedente (cronologicamente)
+// I litri messi a N-1 sono quelli che hanno percorso i km fino a N
+const prevLitersMap = computed(() => {
+  const asc = data.value.fuelRecords
+    .filter(r => r.vehicleId === selectedVehicleId.value)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const map = {}
+  for (let i = 1; i < asc.length; i++) {
+    if (asc[i - 1].liters) map[asc[i].id] = asc[i - 1].liters
+  }
+  return map
+})
+
 const availableYears = computed(() => {
   const years = [...new Set(allRecords.value.map(r => new Date(r.date).getFullYear()))]
   return years.sort((a, b) => b - a)
@@ -95,16 +108,19 @@ function formatMonthShort(dateStr) {
 
 function getConsumptionDisplay(record) {
   const km = record.kmDriven
-  if (!km || !record.liters || km <= 0) return null
+  const prevLiters = prevLitersMap.value[record.id]
+  if (!km || !prevLiters || km <= 0) return null
   if (data.value.settings.consumptionUnit === 'L100km') {
-    return { value: ((record.liters / km) * 100).toFixed(1), unit: 'L/100' }
+    return { value: ((prevLiters / km) * 100).toFixed(1), unit: 'L/100' }
   }
-  return { value: (km / record.liters).toFixed(1), unit: 'km/L' }
+  return { value: (km / prevLiters).toFixed(1), unit: 'km/L' }
 }
 
 function consumptionClass(record) {
-  if (!record.kmDriven || !record.liters) return ''
-  const kmPerL = record.kmDriven / record.liters
+  const km = record.kmDriven
+  const prevLiters = prevLitersMap.value[record.id]
+  if (!km || !prevLiters) return ''
+  const kmPerL = km / prevLiters
   if (kmPerL > 14) return 'cons-good'
   if (kmPerL > 9) return 'cons-avg'
   return 'cons-poor'

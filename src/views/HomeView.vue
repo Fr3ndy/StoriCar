@@ -367,7 +367,7 @@ function dlLabel(dl) {
   inset: -8px;                        /* bleed beyond card edges so blur doesn't show white border */
   background-size: cover;
   background-position: center;
-  filter: blur(18px);
+  /* filter: blur(18px); */
   transform: scale(1.08);             /* slight zoom to mask edge artifacts from blur */
   z-index: 0;
 }
