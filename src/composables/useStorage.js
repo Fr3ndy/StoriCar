@@ -80,7 +80,9 @@ function mapFuelRecord(r) {
   return {
     id: r.id, vehicleId: r.vehicle_id, date: r.date, amount: r.amount,
     liters: r.liters, pricePerLiter: r.price_per_liter, kmDriven: r.km_driven,
-    odometer: r.odometer, remainingRange: r.remaining_range, notes: r.notes,
+    odometer: r.odometer, remainingRange: r.remaining_range,
+    fullTank: r.full_tank !== false, // default true se colonna assente/null
+    notes: r.notes,
     location: r.location ? JSON.parse(r.location) : null, address: r.address
   }
 }
@@ -453,6 +455,7 @@ export function useStorage() {
         km_driven:       record.kmDriven,
         odometer:        record.odometer,
         remaining_range: record.remainingRange,
+        full_tank:       record.fullTank !== false,
         notes:           record.notes,
         location:        record.location ? JSON.stringify(record.location) : null,
         address:         record.address
@@ -479,6 +482,7 @@ export function useStorage() {
     if ('kmDriven'       in updates) db.km_driven       = updates.kmDriven
     if ('odometer'       in updates) db.odometer        = updates.odometer
     if ('remainingRange' in updates) db.remaining_range = updates.remainingRange
+    if ('fullTank'       in updates) db.full_tank       = updates.fullTank !== false
     if ('notes'          in updates) db.notes           = updates.notes
     if ('location'       in updates) db.location        = updates.location ? JSON.stringify(updates.location) : null
     if ('address'        in updates) db.address         = updates.address
