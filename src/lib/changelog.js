@@ -1,6 +1,6 @@
 // ── Storicar Changelog ─────────────────────────────────────────────────────
 // Versione corrente dell'app. Aggiorna questo campo ad ogni rilascio.
-export const APP_VERSION = '1.2.0'
+export const APP_VERSION = '1.3.0'
 
 // Tipi di cambiamento
 // 'new'      → nuova funzionalità
@@ -9,6 +9,27 @@ export const APP_VERSION = '1.2.0'
 // 'removed'  → funzionalità rimossa
 
 export const changelog = [
+  {
+    version: '1.3.0',
+    date: '2026-03-22',
+    title: 'Prezzi carburante & fix consumo',
+    emoji: '🗺️',
+    highlights: [
+      'Chip carburante raggruppati per famiglia',
+      'Sezione prezzi area ridisegnata',
+      'Fix calcolo consumo per rifornimento',
+    ],
+    changes: [
+      { type: 'new', text: 'Copertina veicolo come sfondo sfocato nella card principale' },
+      { type: 'new', text: 'Layout desktop: colonna centrata 600px con sfondo scuro' },
+      { type: 'new', text: 'Icona impostazioni nella topbar' },
+      { type: 'improved', text: 'Chip mappa carburanti raggruppati in 6 famiglie (le varianti premium appaiono nel dettaglio stazione)' },
+      { type: 'improved', text: 'Sezione "Prezzi area" ridisegnata: righe per famiglia con min/media/max, cliccabili' },
+      { type: 'improved', text: 'Nomi carburanti aggiornati ai nomi esatti API MIMIT (inclusi premium brand-specific)' },
+      { type: 'improved', text: 'Zoom mappa spostato in alto a destra per non sovrapporsi ai chip' },
+      { type: 'fixed', text: 'Calcolo consumo per rifornimento: usa i litri del rifornimento precedente, non quello attuale' },
+    ]
+  },
   {
     version: '1.2.0',
     date: '2026-03-19',
