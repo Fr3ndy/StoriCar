@@ -57,6 +57,13 @@ watch(dataReady, (val) => { console.log('[App] dataReady:', val) })
 onMounted(() => {
   setTheme(getTheme())
 
+  // Forza il reload quando un nuovo service worker prende il controllo (aggiornamento app)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload()
+    })
+  }
+
   watch(dataReady, (ready) => {
     if (!ready) return
     const days = data.value.settings.notifyDeadlinesDays ?? 30
