@@ -5,12 +5,28 @@ import { useStorage } from './composables/useStorage'
 import { useAuth } from './composables/useAuth'
 import { useNotifications } from './composables/useNotifications'
 import WhatsNewModal from './components/WhatsNewModal.vue'
+import { useRegisterSW } from 'virtual:pwa-register/vue'
 
 const router = useRouter()
 const route  = useRoute()
 const { getTheme, setTheme, data, dataReady } = useStorage()
 const { user, signOut } = useAuth()
 const { checkDeadlines } = useNotifications()
+
+// Polling ogni 60s — forza reload automatico quando c'è un aggiornamento
+useRegisterSW({
+  onRegisteredSW(_swUrl, r) {
+    setInterval(async () => {
+      if (!r) return
+      if (r.installing) return
+      if ('connection' in navigator && !navigator.onLine) return
+      await r.update()
+    }, 60 * 1000)
+  },
+  onNeedRefresh() {
+    window.location.reload()
+  }
+})
 
 const currentTheme = computed(() => data.value.settings.theme)
 const menuOpen = ref(false)
@@ -56,13 +72,6 @@ watch(dataReady, (val) => { console.log('[App] dataReady:', val) })
 
 onMounted(() => {
   setTheme(getTheme())
-
-  // Forza il reload quando un nuovo service worker prende il controllo (aggiornamento app)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload()
-    })
-  }
 
   watch(dataReady, (ready) => {
     if (!ready) return

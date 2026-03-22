@@ -72,7 +72,8 @@ function mapVehicle(r) {
   return {
     id: r.id, name: r.name, vehicleType: r.vehicle_type, plate: r.plate,
     brand: r.brand, model: r.model, year: r.year, fuelType: r.fuel_type,
-    initialOdometer: r.initial_odometer
+    initialOdometer: r.initial_odometer,
+    coverImageUrl: r.cover_image_url ?? null
   }
 }
 function mapFuelRecord(r) {
@@ -371,7 +372,8 @@ export function useStorage() {
         model:            vehicle.model,
         year:             vehicle.year,
         fuel_type:        vehicle.fuelType,
-        initial_odometer: vehicle.initialOdometer || 0
+        initial_odometer: vehicle.initialOdometer || 0,
+        cover_image_url:  vehicle.coverImageUrl   ?? null
       })
       .select().single()
     if (error) throw error
@@ -400,6 +402,7 @@ export function useStorage() {
     if ('year'            in updates) db.year             = updates.year
     if ('fuelType'        in updates) db.fuel_type        = updates.fuelType
     if ('initialOdometer' in updates) db.initial_odometer = updates.initialOdometer
+    if ('coverImageUrl'   in updates) db.cover_image_url  = updates.coverImageUrl ?? null
     const { error } = await supabase.from('vehicles').update(db).eq('id', id)
     if (error) throw error
     const i = data.value.vehicles.findIndex(v => v.id === id)

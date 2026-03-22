@@ -16,7 +16,7 @@ export default defineConfig({
     tailwindcss(),
     vue(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       manifest: {
         name: 'Storicar',
         short_name: 'Storicar',
