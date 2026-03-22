@@ -196,16 +196,42 @@ export function useStatistics(vehicleId, filters = null) {
     fuelRecords.value.slice().reverse().map(r => ({ date: r.date, price: r.pricePerLiter }))
   )
 
-  const consumptionHistory = computed(() =>
-    recordsWithEffectiveKm.value
-      .filter(r => r.effectiveKm && r.liters)
-      .map(r => ({
-        date: r.date,
-        consumption: consumptionUnit.value === 'L100km'
-          ? (r.liters / r.effectiveKm) * 100
-          : r.effectiveKm / r.liters
-      }))
-  )
+  // Consumo fill-to-fill: solo tra pieni completi (fullTank !== false).
+  // Per ogni pieno N: km = odo_N - odo_{prevFull}
+  //                   litri = somma da prevFull+1 a N incluso
+  const consumptionHistory = computed(() => {
+    const asc = allFuelRecords.value.slice().reverse() // tutti, dal più vecchio
+    const result = []
+    let prevFullIdx = -1
+
+    for (let i = 0; i < asc.length; i++) {
+      const r = asc[i]
+      const isFull = r.fullTank !== false
+
+      if (isFull && prevFullIdx >= 0) {
+        const prevFull = asc[prevFullIdx]
+        const km = (r.odometer ?? 0) - (prevFull.odometer ?? 0)
+        if (km > 0) {
+          let totalLiters = 0
+          for (let j = prevFullIdx + 1; j <= i; j++) {
+            totalLiters += asc[j].liters ?? 0
+          }
+          if (totalLiters > 0) {
+            result.push({
+              date: r.date,
+              consumption: consumptionUnit.value === 'L100km'
+                ? (totalLiters / km) * 100
+                : km / totalLiters
+            })
+          }
+        }
+      }
+
+      if (isFull) prevFullIdx = i
+    }
+
+    return result
+  })
 
   const monthlySpending = computed(() => {
     const monthly = {}
@@ -303,22 +329,53 @@ export function useStatistics(vehicleId, filters = null) {
     }
   })
 
-  // ── Lista rifornimenti con consumo calcolato ──
+  // ── Lista rifornimenti con consumo calcolato (fill-to-fill) ──
   const detailedFuelList = computed(() => {
+    // Usa tutti i record ASC per trovare il pieno precedente anche fuori dal filtro
+    const allAsc = allFuelRecords.value.slice().reverse()
+    // Mappa id → { km, liters, kmPerL }
+    const cMap = {}
+    let prevFullIdx = -1
+
+    for (let i = 0; i < allAsc.length; i++) {
+      const r = allAsc[i]
+      const isFull = r.fullTank !== false
+
+      if (isFull && prevFullIdx >= 0) {
+        const prevFull = allAsc[prevFullIdx]
+        const km = (r.odometer ?? 0) - (prevFull.odometer ?? 0)
+        if (km > 0) {
+          let totalLiters = 0
+          for (let j = prevFullIdx + 1; j <= i; j++) {
+            totalLiters += allAsc[j].liters ?? 0
+          }
+          if (totalLiters > 0) {
+            cMap[r.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
+          }
+        }
+      }
+
+      if (isFull) prevFullIdx = i
+    }
+
+    // Arricchisci i record filtrati con il consumo calcolato
     return recordsWithEffectiveKm.value
       .slice()
       .reverse()
-      .map(r => ({
-        ...r,
-        computedConsumption: r.effectiveKm && r.liters
-          ? consumptionUnit.value === 'L100km'
-            ? (r.liters / r.effectiveKm) * 100
-            : r.effectiveKm / r.liters
-          : null,
-        costPerKm: r.effectiveKm && r.amount
-          ? r.amount / r.effectiveKm
-          : null
-      }))
+      .map(r => {
+        const c = r.fullTank !== false ? cMap[r.id] : null
+        return {
+          ...r,
+          computedConsumption: c
+            ? consumptionUnit.value === 'L100km'
+              ? (c.liters / c.km) * 100
+              : c.kmPerL
+            : null,
+          costPerKm: r.effectiveKm && r.amount
+            ? r.amount / r.effectiveKm
+            : null
+        }
+      })
   })
 
   // ── Efficienza nel tempo: migliorata o peggiorata ──

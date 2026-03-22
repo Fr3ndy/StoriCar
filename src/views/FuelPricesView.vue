@@ -104,9 +104,38 @@ const impianti   = computed(() => data.value?.impianti ?? [])
 const allStats   = computed(() => data.value?.stats ?? {})
 const aggiornato = computed(() => data.value?.aggiornato ?? null)
 const totale     = computed(() => data.value?.totale ?? 0)
-const carburanti = computed(() => data.value?.carburanti ?? ['Benzina', 'Gasolio'])
 
-const statsFuel  = computed(() => allStats.value[selectedFuel.value] ?? null)
+// Famiglie di carburanti: la chip mostra il nome famiglia,
+// ma include tutti i nomi equivalenti API MIMIT (es. brand-specific)
+const FUEL_FAMILIES = {
+  'Benzina': ['Benzina', 'Blue Super', 'HiQ Perform+'],
+  'Gasolio': ['Gasolio', 'Blue Diesel', 'HVOlution', 'HVO', 'Gasolio Premium', 'Supreme Diesel', 'Hi-Q Diesel'],
+  'Metano':  ['Metano'],
+  'GPL':     ['GPL'],
+  'L-GNC':   ['L-GNC'],
+  'GNL':     ['GNL'],
+}
+
+// Chip visibili: solo le famiglie per cui l'API ha restituito almeno un membro
+const carburanti = computed(() => {
+  const apiList = data.value?.carburanti ?? ['Benzina', 'Gasolio']
+  return Object.keys(FUEL_FAMILIES).filter(family =>
+    FUEL_FAMILIES[family].some(f => apiList.includes(f))
+  )
+})
+
+// Membri della famiglia del carburante selezionato
+const selectedFamilyMembers = computed(() =>
+  FUEL_FAMILIES[selectedFuel.value] ?? [selectedFuel.value]
+)
+
+// Stats: primo membro della famiglia con dati disponibili
+const statsFuel = computed(() => {
+  for (const m of selectedFamilyMembers.value) {
+    if (allStats.value[m]) return allStats.value[m]
+  }
+  return null
+})
 const mediaself  = computed(() => statsFuel.value?.self?.media ?? null)
 
 const selectedImp = computed(() =>
@@ -119,7 +148,12 @@ function fmt(n) {
 }
 
 function getSelf(imp) {
-  return imp.prezzi?.[selectedFuel.value]?.self ?? null
+  let best = null
+  for (const m of selectedFamilyMembers.value) {
+    const p = imp.prezzi?.[m]?.self ?? null
+    if (p != null && (best === null || p < best)) best = p
+  }
+  return best
 }
 
 function prezzoColore(selfVal) {
@@ -130,10 +164,15 @@ function prezzoColore(selfVal) {
 }
 
 function prezzoLabel(imp) {
-  const p = imp.prezzi?.[selectedFuel.value]
-  if (!p) return '?'
-  if (p.self != null) return fmt(p.self)
-  if (p.servito != null) return fmt(p.servito)
+  let bestSelf = null, bestServ = null
+  for (const m of selectedFamilyMembers.value) {
+    const p = imp.prezzi?.[m]
+    if (!p) continue
+    if (p.self != null && (bestSelf === null || p.self < bestSelf)) bestSelf = p.self
+    if (p.servito != null && (bestServ === null || p.servito < bestServ)) bestServ = p.servito
+  }
+  if (bestSelf != null) return fmt(bestSelf)
+  if (bestServ != null) return fmt(bestServ)
   return '?'
 }
 
@@ -172,7 +211,8 @@ function initMap() {
   const center = userLat.value != null
     ? [userLat.value, userLng.value]
     : [41.90, 12.49] // fallback solo visivo, nessuna richiesta API senza GPS
-  map = L.map(mapContainer.value, { zoomControl: true }).setView(center, 12)
+  map = L.map(mapContainer.value, { zoomControl: false }).setView(center, 12)
+  L.control.zoom({ position: 'topright' }).addTo(map)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
     maxZoom: 19,
@@ -285,6 +325,24 @@ function closePanel() {
   if (prev) refreshMarkerIcon(prev)
 }
 
+// Data aggiornamento: primo membro della famiglia con data disponibile
+function panelDate(imp) {
+  for (const m of selectedFamilyMembers.value) {
+    const d = imp?.prezzi?.[m]?.data
+    if (d) return d
+  }
+  return null
+}
+
+// Stats per famiglia: primo membro con dati self disponibili
+function familyStats(family) {
+  const members = FUEL_FAMILIES[family] ?? [family]
+  for (const m of members) {
+    if (allStats.value[m]?.self) return allStats.value[m]
+  }
+  return null
+}
+
 watch(selectedId, (newId, oldId) => {
   if (oldId) refreshMarkerIcon(oldId)
   if (newId) refreshMarkerIcon(newId)
@@ -304,22 +362,6 @@ watch(selectedId, (newId, oldId) => {
     />
 
     <template v-if="!isGuest">
-    <!-- Barra in alto: GPS + refresh + meta -->
-    <div class="top-bar">
-      <div class="top-meta">
-        <span v-if="loading" class="spinner-sm"></span>
-        <span v-if="aggiornato && !loading">{{ totale }} impianti · agg. {{ aggiornato }}</span>
-        <span v-else-if="loading">Caricamento...</span>
-      </div>
-      <div class="top-actions">
-        <button class="icon-btn" @click="locateMe" :disabled="locating" :class="{ active: userLat }" title="Vai alla mia posizione">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        </button>
-        <button class="icon-btn" @click="load(true)" :disabled="loading" title="Aggiorna dati">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-        </button>
-      </div>
-    </div>
 
     <!-- Errore -->
     <div v-if="error" class="error-banner">
@@ -349,6 +391,23 @@ watch(selectedId, (newId, oldId) => {
       </div>
     </div>
 
+    <!-- Barra in alto: GPS + refresh + meta -->
+    <div class="top-bar">
+      <div class="top-meta">
+        <span v-if="loading" class="spinner-sm"></span>
+        <span v-if="aggiornato && !loading">{{ totale }} impianti · agg. {{ aggiornato }}</span>
+        <span v-else-if="loading">Caricamento...</span>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" @click="locateMe" :disabled="locating" :class="{ active: userLat }" title="Vai alla mia posizione">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </button>
+        <button class="icon-btn" @click="load(true)" :disabled="loading" title="Aggiorna dati">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Dettaglio stazione selezionata: subito sotto la mappa -->
     <Transition name="slide-up">
       <div v-if="selectedImp" class="detail-panel">
@@ -370,49 +429,52 @@ watch(selectedId, (newId, oldId) => {
           </button>
         </div>
         <div class="panel-prices">
-          <template v-for="(p, carb) in selectedImp.prezzi" :key="carb">
-            <div v-if="p.self != null" class="panel-price-row" :class="{ 'is-selected-fuel': carb === selectedFuel }">
-              <span class="panel-price-type">{{ carb }} <span class="price-mode">self</span></span>
-              <span class="panel-price-val" :style="{ color: carb === selectedFuel ? prezzoColore(p.self) : 'var(--text-secondary)' }">{{ fmt(p.self) }} €/L</span>
-            </div>
-            <div v-if="p.servito != null" class="panel-price-row panel-price-row-sm">
-              <span class="panel-price-type">{{ carb }} <span class="price-mode">servito</span></span>
-              <span class="panel-price-val" style="color:var(--text-secondary)">{{ fmt(p.servito) }} €/L</span>
-            </div>
+          <template v-for="carb in selectedFamilyMembers" :key="carb">
+            <template v-if="selectedImp.prezzi?.[carb]">
+              <div v-if="selectedImp.prezzi[carb].self != null" class="panel-price-row is-selected-fuel">
+                <span class="panel-price-type">{{ carb }} <span class="price-mode">self</span></span>
+                <span class="panel-price-val" :style="{ color: prezzoColore(selectedImp.prezzi[carb].self) }">{{ fmt(selectedImp.prezzi[carb].self) }} €/L</span>
+              </div>
+              <div v-if="selectedImp.prezzi[carb].servito != null" class="panel-price-row panel-price-row-sm">
+                <span class="panel-price-type">{{ carb }} <span class="price-mode">servito</span></span>
+                <span class="panel-price-val" style="color:var(--text-secondary)">{{ fmt(selectedImp.prezzi[carb].servito) }} €/L</span>
+              </div>
+            </template>
           </template>
         </div>
-        <div class="panel-meta" v-if="selectedImp.prezzi?.[selectedFuel]?.data">
-          Agg. {{ selectedImp.prezzi[selectedFuel].data }}
+        <div class="panel-meta" v-if="panelDate(selectedImp)">
+          Agg. {{ panelDate(selectedImp) }}
         </div>
       </div>
     </Transition>
 
 
-    <!-- Stats tutti i carburanti: in fondo -->
-    <div class="stats-section" v-if="Object.keys(allStats).length">
-      <div class="stats-title">Prezzi area · self-service</div>
-      <div class="stats-grid">
-        <template v-for="(s, fuel) in allStats" :key="fuel">
-          <div v-if="s && s.self" class="stats-card">
-            <div class="stats-card-header">{{ fuel }}</div>
-            <div class="stats-row">
-              <div class="stats-item">
-                <div class="stats-val stats-min">{{ fmt(s.self.min) }}</div>
-                <div class="stats-lbl">min</div>
-              </div>
-              <div class="stats-item stats-item-mid">
-                <div class="stats-val">{{ fmt(s.self.media) }}</div>
-                <div class="stats-lbl">media</div>
-              </div>
-              <div class="stats-item">
-                <div class="stats-val stats-max">{{ fmt(s.self.max) }}</div>
-                <div class="stats-lbl">max</div>
-              </div>
-            </div>
-            <div class="stats-count">{{ s.self.count }} impianti</div>
-          </div>
-        </template>
+    <!-- Prezzi area per famiglia: in fondo -->
+    <div class="stats-section" v-if="carburanti.length && !loading">
+      <div class="stats-header">
+        <span class="stats-title">Prezzi area · self-service</span>
+        <span class="stats-badge">{{ totale }} impianti</span>
       </div>
+      <div class="stats-list">
+        <div
+          v-for="family in carburanti" :key="family"
+          class="stats-row-item"
+          :class="{ 'stats-row-active': family === selectedFuel }"
+          @click="switchFuel(family)"
+          v-if="familyStats(family)"
+        >
+          <div class="sri-name">{{ family }}</div>
+          <div class="sri-prices">
+            <span class="sri-min">{{ fmt(familyStats(family).self.min) }}</span>
+            <span class="sri-sep">–</span>
+            <span class="sri-media">{{ fmt(familyStats(family).self.media) }}</span>
+            <span class="sri-sep">–</span>
+            <span class="sri-max">{{ fmt(familyStats(family).self.max) }}</span>
+          </div>
+          <div class="sri-count">{{ familyStats(family).self.count }}</div>
+        </div>
+      </div>
+      <div class="stats-footer">Fonte: MIMIT · Osservatorio Carburanti</div>
     </div>
 
     </template><!-- /v-if="!isGuest" -->
@@ -481,12 +543,13 @@ watch(selectedId, (newId, oldId) => {
   border: 1px solid var(--border);
 }
 
-/* Selettore carburante sovrapposto: piccolo, in alto a sx */
+/* Selettore carburante sovrapposto: piccolo, in alto a sx
+   right: 52px lascia spazio ai bottoni zoom Leaflet (topright) */
 .fuel-selector-overlay {
   position: absolute;
   top: 10px;
   left: 10px;
-  right: 10px;
+  right: 52px;
   z-index: 500;
   display: flex;
   flex-wrap: nowrap;
@@ -599,70 +662,89 @@ watch(selectedId, (newId, oldId) => {
 .panel-meta { font-size: 11px; color: var(--text-secondary); }
 
 
-/* Stats in fondo */
+/* Stats in fondo — redesign per famiglia */
 .stats-section {
   margin-top: 4px;
-}
-.stats-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-  padding: 0 2px;
-}
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-.stats-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 14px;
+  border-radius: 16px;
+  overflow: hidden;
 }
-.stats-card-header {
-  font-size: 12px;
+.stats-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.stats-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+.stats-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+.stats-list {
+  display: flex;
+  flex-direction: column;
+}
+.stats-row-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.stats-row-item:last-child { border-bottom: none; }
+.stats-row-item:hover { background: var(--bg-secondary); }
+.stats-row-item.stats-row-active { background: rgba(99,102,241,0.07); }
+.sri-name {
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  min-width: 60px;
 }
-.stats-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-.stats-item {
+.stats-row-active .sri-name { color: var(--primary); }
+.sri-prices {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  justify-content: center;
 }
-.stats-item-mid {
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  padding: 0 4px;
-}
-.stats-val {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: var(--text-primary);
-}
-.stats-min { color: #16a34a; }
-.stats-max { color: #dc2626; }
-.stats-lbl {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-.stats-count {
+.sri-min { color: #16a34a; }
+.sri-max { color: #dc2626; }
+.sri-media { color: var(--text-primary); }
+.sri-sep { color: var(--text-secondary); font-size: 10px; font-weight: 400; opacity: 0.5; }
+.sri-count {
   font-size: 10px;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-top: 6px;
+  min-width: 24px;
   text-align: right;
+}
+.stats-footer {
+  font-size: 9px;
+  color: var(--text-secondary);
+  padding: 5px 14px;
+  border-top: 1px solid var(--border);
+  opacity: 0.55;
+  text-align: center;
 }
 
 /* Transizione pannello */

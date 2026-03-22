@@ -115,7 +115,15 @@ function dlLabel(dl) {
     <div v-else class="dashboard">
 
       <!-- Vehicle card -->
-      <div class="vehicle-card">
+      <div class="vehicle-card" :class="{ 'has-cover': stats.vehicle.value?.coverImageUrl }">
+        <!-- Blurred cover background (shown only when a cover image exists) -->
+        <div
+          v-if="stats.vehicle.value?.coverImageUrl"
+          class="vc-cover"
+          :style="{ backgroundImage: `url(${stats.vehicle.value.coverImageUrl})` }"
+        ></div>
+        <div v-if="stats.vehicle.value?.coverImageUrl" class="vc-cover-overlay"></div>
+
         <div class="vc-top">
           <div class="vc-icon">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -351,7 +359,39 @@ function dlLabel(dl) {
 .vc-odo-num { font-size: 40px; font-weight: 900; color: var(--text-primary); letter-spacing: -2px; line-height: 1; }
 .vc-odo-unit { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
 
-.vc-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; }
+.vc-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; z-index: 3; }
+
+/* ── Cover image blur effect ── */
+.vc-cover {
+  position: absolute;
+  inset: -8px;                        /* bleed beyond card edges so blur doesn't show white border */
+  background-size: cover;
+  background-position: center;
+  /* filter: blur(18px); */
+  transform: scale(1.08);             /* slight zoom to mask edge artifacts from blur */
+  z-index: 0;
+}
+
+.vc-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(150deg, rgba(0,0,0,0.58) 0%, rgba(0,0,0,0.38) 100%);
+  z-index: 1;
+}
+
+/* Lift text content above the overlay */
+.has-cover .vc-top,
+.has-cover .vc-odo { position: relative; z-index: 2; }
+
+/* White text when cover is active */
+.has-cover .vc-name                { color: #fff; }
+.has-cover .vc-sub                 { color: rgba(255,255,255,0.72); }
+.has-cover .vc-sub strong          { color: #fff; }
+.has-cover .vc-chevron             { color: rgba(255,255,255,0.55); }
+.has-cover .vc-odo-num             { color: #fff; }
+.has-cover .vc-odo-unit            { color: rgba(255,255,255,0.72); }
+.has-cover .vc-icon                { background: rgba(255,255,255,0.18); color: #fff; }
+[data-theme="dark"] .has-cover .vc-icon { background: rgba(255,255,255,0.14); color: #fff; }
 
 /* ── Quick actions ── */
 .actions-grid {

@@ -25,6 +25,42 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
+// Calcolo consumo fill-to-fill: solo tra due pieni completi (fullTank === true).
+// Per ogni pieno completo N:
+//   km     = odo_N - odo_{prevFull}
+//   litri  = somma di tutti i litri da prevFull+1 a N incluso
+// I record senza fullTank esplicito sono trattati come pieni (retrocompatibilità).
+const consumptionMap = computed(() => {
+  const asc = data.value.fuelRecords
+    .filter(r => r.vehicleId === selectedVehicleId.value)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const map = {}
+  let prevFullIdx = -1
+
+  for (let i = 0; i < asc.length; i++) {
+    const curr = asc[i]
+    const isFull = curr.fullTank !== false // default true per record pre-feature
+
+    if (isFull && prevFullIdx >= 0) {
+      const prevFull = asc[prevFullIdx]
+      const km = (curr.odometer ?? 0) - (prevFull.odometer ?? 0)
+      if (km > 0) {
+        let totalLiters = 0
+        for (let j = prevFullIdx + 1; j <= i; j++) {
+          totalLiters += asc[j].liters ?? 0
+        }
+        if (totalLiters > 0) {
+          map[curr.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
+        }
+      }
+    }
+
+    if (isFull) prevFullIdx = i
+  }
+
+  return map
+})
+
 const availableYears = computed(() => {
   const years = [...new Set(allRecords.value.map(r => new Date(r.date).getFullYear()))]
   return years.sort((a, b) => b - a)
@@ -94,19 +130,21 @@ function formatMonthShort(dateStr) {
 }
 
 function getConsumptionDisplay(record) {
-  const km = record.kmDriven
-  if (!km || !record.liters || km <= 0) return null
+  if (record.fullTank === false) return null // parziale: non mostrare consumo
+  const c = consumptionMap.value[record.id]
+  if (!c) return null
   if (data.value.settings.consumptionUnit === 'L100km') {
-    return { value: ((record.liters / km) * 100).toFixed(1), unit: 'L/100' }
+    return { value: ((c.liters / c.km) * 100).toFixed(1), unit: 'L/100' }
   }
-  return { value: (km / record.liters).toFixed(1), unit: 'km/L' }
+  return { value: c.kmPerL.toFixed(1), unit: 'km/L' }
 }
 
 function consumptionClass(record) {
-  if (!record.kmDriven || !record.liters) return ''
-  const kmPerL = record.kmDriven / record.liters
-  if (kmPerL > 14) return 'cons-good'
-  if (kmPerL > 9) return 'cons-avg'
+  if (record.fullTank === false) return ''
+  const c = consumptionMap.value[record.id]
+  if (!c) return ''
+  if (c.kmPerL > 14) return 'cons-good'
+  if (c.kmPerL > 9) return 'cons-avg'
   return 'cons-poor'
 }
 
@@ -208,8 +246,9 @@ function editRecord(record) {
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
               <div class="tc-right">
                 <span v-if="record.remainingRange != null" class="tc-range" title="Autonomia registrata">⚡</span>
+                <span v-if="record.fullTank === false" class="tc-partial">parziale</span>
                 <span
-                  v-if="getConsumptionDisplay(record)"
+                  v-else-if="getConsumptionDisplay(record)"
                   class="tc-cons"
                   :class="consumptionClass(record)"
                 >
@@ -343,6 +382,11 @@ function editRecord(record) {
 .tc-right { display: flex; align-items: center; gap: 6px; }
 
 .tc-range { font-size: 12px; opacity: 0.6; }
+.tc-partial {
+  font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px;
+  background: rgba(99,102,241,0.10); color: var(--primary);
+}
 
 .tc-cons {
   font-size: 11px; font-weight: 700;

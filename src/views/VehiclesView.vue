@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useStorage } from '../composables/useStorage'
+import { useAuth } from '../composables/useAuth'
+import { supabase } from '../lib/supabase'
 
 const { data, addVehicle, updateVehicle, deleteVehicle, setDefaultVehicle, getDefaultVehicleId } = useStorage()
+const { user, isGuest } = useAuth()
 
 const vehicles = computed(() => data.value.vehicles)
 const defaultVehicleId = computed(() => getDefaultVehicleId())
@@ -17,8 +20,45 @@ const form = ref({
   model: '',
   year: '',
   fuelType: 'benzina',
-  initialOdometer: ''
+  initialOdometer: '',
+  coverImageUrl: ''
 })
+
+const coverLoading = ref(false)
+const coverError   = ref('')
+
+async function uploadCoverImage(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  event.target.value = ''
+
+  if (file.size > 5 * 1024 * 1024) {
+    coverError.value = 'Immagine troppo grande (max 5 MB)'
+    return
+  }
+
+  coverLoading.value = true
+  coverError.value   = ''
+  try {
+    const ext  = file.name.split('.').pop() || 'jpg'
+    const path = `${user.value.id}/cover_${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('vehicle-covers')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (upErr) throw upErr
+    const { data: urlData } = supabase.storage.from('vehicle-covers').getPublicUrl(path)
+    form.value.coverImageUrl = urlData.publicUrl + '?t=' + Date.now()
+  } catch (e) {
+    coverError.value = 'Errore durante il caricamento. Riprova.'
+    console.error('[cover upload]', e)
+  } finally {
+    coverLoading.value = false
+  }
+}
+
+function removeCoverImage() {
+  form.value.coverImageUrl = ''
+}
 
 const vehicleTypes = [
   { value: 'auto', label: 'Auto' },
@@ -36,12 +76,14 @@ const fuelTypes = [
 
 function openAddForm() {
   editingVehicle.value = null
-  form.value = { name: '', vehicleType: 'auto', plate: '', brand: '', model: '', year: '', fuelType: 'benzina', initialOdometer: '' }
+  coverError.value = ''
+  form.value = { name: '', vehicleType: 'auto', plate: '', brand: '', model: '', year: '', fuelType: 'benzina', initialOdometer: '', coverImageUrl: '' }
   showForm.value = true
 }
 
 function openEditForm(vehicle) {
   editingVehicle.value = vehicle.id
+  coverError.value = ''
   form.value = {
     name: vehicle.name || '',
     vehicleType: vehicle.vehicleType || 'auto',
@@ -50,7 +92,8 @@ function openEditForm(vehicle) {
     model: vehicle.model || '',
     year: vehicle.year || '',
     fuelType: vehicle.fuelType || 'benzina',
-    initialOdometer: vehicle.initialOdometer || ''
+    initialOdometer: vehicle.initialOdometer || '',
+    coverImageUrl: vehicle.coverImageUrl || ''
   }
   showForm.value = true
 }
@@ -157,6 +200,46 @@ async function setAsDefault(vehicleId) {
         <input v-model="form.initialOdometer" type="number" class="form-input" placeholder="es. 50000" min="0" />
       </div>
 
+      <!-- Cover image -->
+      <div class="form-group">
+        <label class="form-label">Foto di copertina</label>
+
+        <!-- Preview -->
+        <div v-if="form.coverImageUrl" class="cover-preview">
+          <img :src="form.coverImageUrl" class="cover-preview-img" alt="Copertina" />
+          <button type="button" class="cover-remove-btn" @click="removeCoverImage">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            Rimuovi
+          </button>
+        </div>
+
+        <!-- Upload / change button (disabled for guests) -->
+        <label class="cover-upload-btn" :class="{ 'cover-upload-loading': coverLoading, 'cover-upload-disabled': isGuest }">
+          <input
+            type="file"
+            accept="image/*"
+            style="display:none"
+            :disabled="coverLoading || isGuest"
+            @change="uploadCoverImage"
+          />
+          <span v-if="coverLoading" class="cover-upload-inner">
+            <div class="spinner-xs"></div>
+            Caricamento…
+          </span>
+          <span v-else class="cover-upload-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            {{ form.coverImageUrl ? 'Cambia foto' : 'Aggiungi foto' }}
+          </span>
+        </label>
+
+        <p v-if="isGuest" class="cover-guest-note">Le foto di copertina richiedono un account Google</p>
+        <p v-if="coverError" class="field-error">{{ coverError }}</p>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-secondary" @click="showForm = false">Annulla</button>
         <button class="btn btn-primary" @click="saveVehicle" :disabled="!form.name">
@@ -176,6 +259,13 @@ async function setAsDefault(vehicleId) {
       </div>
 
       <div v-for="vehicle in vehicles" :key="vehicle.id" class="card vehicle-card">
+        <!-- Cover image banner -->
+        <div
+          v-if="vehicle.coverImageUrl"
+          class="vehicle-cover-banner"
+          :style="{ backgroundImage: `url(${vehicle.coverImageUrl})` }"
+        ></div>
+
         <!-- Top row -->
         <div class="vehicle-top">
           <!-- Icon + info -->
@@ -311,6 +401,76 @@ async function setAsDefault(vehicleId) {
   padding: 14px 16px;
   margin-bottom: 12px;
   border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+/* Cover banner (top of card, negative margin to break out of padding) */
+.vehicle-cover-banner {
+  height: 90px;
+  background-size: cover;
+  background-position: center;
+  margin: -14px -16px 14px;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+}
+
+/* ── Cover upload ── */
+.cover-preview {
+  position: relative;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cover-preview-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+.cover-remove-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.cover-remove-btn svg { width: 13px; height: 13px; }
+
+.cover-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 10px;
+  border: 1.5px dashed var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cover-upload-btn:hover:not(.cover-upload-disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.cover-upload-inner {
+  display: flex; align-items: center; gap: 7px;
+}
+.cover-upload-inner svg { width: 18px; height: 18px; }
+.cover-upload-loading { opacity: 0.7; cursor: not-allowed; }
+.cover-upload-disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cover-guest-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  text-align: center;
 }
 
 .vehicle-top {

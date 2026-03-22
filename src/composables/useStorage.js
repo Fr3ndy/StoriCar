@@ -72,14 +72,17 @@ function mapVehicle(r) {
   return {
     id: r.id, name: r.name, vehicleType: r.vehicle_type, plate: r.plate,
     brand: r.brand, model: r.model, year: r.year, fuelType: r.fuel_type,
-    initialOdometer: r.initial_odometer
+    initialOdometer: r.initial_odometer,
+    coverImageUrl: r.cover_image_url ?? null
   }
 }
 function mapFuelRecord(r) {
   return {
     id: r.id, vehicleId: r.vehicle_id, date: r.date, amount: r.amount,
     liters: r.liters, pricePerLiter: r.price_per_liter, kmDriven: r.km_driven,
-    odometer: r.odometer, remainingRange: r.remaining_range, notes: r.notes,
+    odometer: r.odometer, remainingRange: r.remaining_range,
+    fullTank: r.full_tank !== false, // default true se colonna assente/null
+    notes: r.notes,
     location: r.location ? JSON.parse(r.location) : null, address: r.address
   }
 }
@@ -371,7 +374,8 @@ export function useStorage() {
         model:            vehicle.model,
         year:             vehicle.year,
         fuel_type:        vehicle.fuelType,
-        initial_odometer: vehicle.initialOdometer || 0
+        initial_odometer: vehicle.initialOdometer || 0,
+        cover_image_url:  vehicle.coverImageUrl   ?? null
       })
       .select().single()
     if (error) throw error
@@ -400,6 +404,7 @@ export function useStorage() {
     if ('year'            in updates) db.year             = updates.year
     if ('fuelType'        in updates) db.fuel_type        = updates.fuelType
     if ('initialOdometer' in updates) db.initial_odometer = updates.initialOdometer
+    if ('coverImageUrl'   in updates) db.cover_image_url  = updates.coverImageUrl ?? null
     const { error } = await supabase.from('vehicles').update(db).eq('id', id)
     if (error) throw error
     const i = data.value.vehicles.findIndex(v => v.id === id)
@@ -450,6 +455,7 @@ export function useStorage() {
         km_driven:       record.kmDriven,
         odometer:        record.odometer,
         remaining_range: record.remainingRange,
+        full_tank:       record.fullTank !== false,
         notes:           record.notes,
         location:        record.location ? JSON.stringify(record.location) : null,
         address:         record.address
@@ -476,6 +482,7 @@ export function useStorage() {
     if ('kmDriven'       in updates) db.km_driven       = updates.kmDriven
     if ('odometer'       in updates) db.odometer        = updates.odometer
     if ('remainingRange' in updates) db.remaining_range = updates.remainingRange
+    if ('fullTank'       in updates) db.full_tank       = updates.fullTank !== false
     if ('notes'          in updates) db.notes           = updates.notes
     if ('location'       in updates) db.location        = updates.location ? JSON.stringify(updates.location) : null
     if ('address'        in updates) db.address         = updates.address

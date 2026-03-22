@@ -178,6 +178,45 @@ body {
   max-width: 600px;
   margin: 0 auto;
   width: 100%;
+  /* Scrollbar personalizzata */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.main-content::-webkit-scrollbar {
+  width: 4px;
+}
+.main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.main-content::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.main-content::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-light);
+}
+
+/* ── Desktop: sfondo esterno distinto + app come colonna centrata ── */
+@media (min-width: 640px) {
+  body {
+    background: #d4dae6;
+  }
+  [data-theme="dark"] body {
+    background: #050810;
+  }
+  #app {
+    max-width: 600px;
+    margin: 0 auto;
+    min-height: 100dvh;
+    height: 100dvh;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 12px 48px rgba(0,0,0,0.18);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  [data-theme="dark"] #app {
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 12px 48px rgba(0,0,0,0.6);
+  }
 }
 
 /* ══════════════════════════════════════
@@ -534,9 +573,9 @@ body {
 .toggle.disabled { opacity: 0.4; }
 
 /* ══════════════════════════════════════
-   Theme toggle button (in header)
+   Settings button (in header)
    ══════════════════════════════════════ */
-.theme-toggle {
+.header-settings-btn {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-secondary);
@@ -548,8 +587,9 @@ body {
   justify-content: center;
   transition: all 0.15s;
 }
-.theme-toggle:active { background: var(--border); }
-.theme-toggle svg { width: 18px; height: 18px; }
+.header-settings-btn:active { background: var(--border); }
+.header-settings-btn.active { color: var(--primary); border-color: var(--primary-soft); background: var(--primary-soft); }
+.header-settings-btn svg { width: 18px; height: 18px; }
 
 /* ══════════════════════════════════════
    Map

@@ -61,7 +61,7 @@ function formatDate(dateStr) {
 }
 
 function typeLabel(type) {
-  return { new: 'Nuovo', improved: 'Migliorato', fixed: 'Fix', removed: 'Rimosso' }[type] || type
+  return { new: 'Nuovo', improved: 'Migliorato', fixedd: 'Fix', removed: 'Rimosso' }[type] || type
 }
 </script>
 
@@ -263,12 +263,12 @@ function typeLabel(type) {
 
 .cl-change-badge.new      { background: rgba(16,185,129,0.10); color: #047857; }
 .cl-change-badge.improved { background: rgba(37,99,235,0.09);  color: #2563eb; }
-.cl-change-badge.fixed    { background: rgba(245,158,11,0.10); color: #b45309; }
+.cl-change-badge.fixedd    { background: rgba(245,158,11,0.10); color: #b45309; }
 .cl-change-badge.removed  { background: rgba(239,68,68,0.09);  color: #b91c1c; }
 
 [data-theme="dark"] .cl-change-badge.new      { background: rgba(16,185,129,0.12); color: #6ee7b7; }
 [data-theme="dark"] .cl-change-badge.improved { background: rgba(68,147,248,0.14); color: #93c5fd; }
-[data-theme="dark"] .cl-change-badge.fixed    { background: rgba(245,158,11,0.12); color: #fcd34d; }
+[data-theme="dark"] .cl-change-badge.fixedd    { background: rgba(245,158,11,0.12); color: #fcd34d; }
 [data-theme="dark"] .cl-change-badge.removed  { background: rgba(239,68,68,0.12);  color: #fca5a5; }
 
 .cl-change-text {
