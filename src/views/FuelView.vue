@@ -25,12 +25,29 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
-// Calcolo consumo fill-to-fill: solo tra due pieni completi (fullTank === true).
-// Per ogni pieno completo N:
-//   km     = odo_N - odo_{prevFull}
-//   litri  = somma di tutti i litri da prevFull+1 a N incluso
-// I record senza fullTank esplicito sono trattati come pieni (retrocompatibilità).
-const consumptionMap = computed(() => {
+// Calcolo stima consumo: km dall'ultimo rifornimento / litri dell'ultimo rifornimento.
+// I litri messi al rifornimento N vengono usati per calcolare il consumo al rifornimento N+1.
+// Mostrato per ogni rifornimento che ha un precedente con odometro e litri validi.
+const estimateMap = computed(() => {
+  const asc = data.value.fuelRecords
+    .filter(r => r.vehicleId === selectedVehicleId.value)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const map = {}
+  for (let i = 1; i < asc.length; i++) {
+    const curr = asc[i]
+    const prev = asc[i - 1]
+    const km = (curr.odometer ?? 0) - (prev.odometer ?? 0)
+    const liters = prev.liters ?? 0
+    if (km > 0 && liters > 0) {
+      map[curr.id] = { km, liters, kmPerL: km / liters }
+    }
+  }
+  return map
+})
+
+// Calcolo preciso fill-to-fill: solo tra due pieni completi (fullTank !== false).
+// km = odo_N - odo_{prevFull}; litri = somma di tutti i litri da prevFull+1 a N incluso.
+const accurateMap = computed(() => {
   const asc = data.value.fuelRecords
     .filter(r => r.vehicleId === selectedVehicleId.value)
     .sort((a, b) => new Date(a.date) - new Date(b.date))
@@ -39,19 +56,15 @@ const consumptionMap = computed(() => {
 
   for (let i = 0; i < asc.length; i++) {
     const curr = asc[i]
-    const isFull = curr.fullTank !== false // default true per record pre-feature
+    const isFull = curr.fullTank !== false
 
     if (isFull && prevFullIdx >= 0) {
       const prevFull = asc[prevFullIdx]
       const km = (curr.odometer ?? 0) - (prevFull.odometer ?? 0)
       if (km > 0) {
         let totalLiters = 0
-        for (let j = prevFullIdx + 1; j <= i; j++) {
-          totalLiters += asc[j].liters ?? 0
-        }
-        if (totalLiters > 0) {
-          map[curr.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
-        }
+        for (let j = prevFullIdx + 1; j <= i; j++) totalLiters += asc[j].liters ?? 0
+        if (totalLiters > 0) map[curr.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
       }
     }
 
@@ -129,22 +142,27 @@ function formatMonthShort(dateStr) {
   return new Date(dateStr).toLocaleDateString('it-IT', { month: 'short' })
 }
 
-function getConsumptionDisplay(record) {
-  if (record.fullTank === false) return null // parziale: non mostrare consumo
-  const c = consumptionMap.value[record.id]
+function formatConsumption(c) {
   if (!c) return null
-  if (data.value.settings.consumptionUnit === 'L100km') {
-    return { value: ((c.liters / c.km) * 100).toFixed(1), unit: 'L/100' }
+  if (data.value.settings?.consumptionUnit === 'L100km') {
+    return { value: ((c.liters / c.km) * 100).toFixed(1), unit: 'L/100', kmPerL: c.kmPerL }
   }
-  return { value: c.kmPerL.toFixed(1), unit: 'km/L' }
+  return { value: c.kmPerL.toFixed(1), unit: 'km/L', kmPerL: c.kmPerL }
 }
 
-function consumptionClass(record) {
-  if (record.fullTank === false) return ''
-  const c = consumptionMap.value[record.id]
-  if (!c) return ''
-  if (c.kmPerL > 14) return 'cons-good'
-  if (c.kmPerL > 9) return 'cons-avg'
+function getEstimateDisplay(record) {
+  return formatConsumption(estimateMap.value[record.id])
+}
+
+function getAccurateDisplay(record) {
+  if (record.fullTank === false) return null
+  return formatConsumption(accurateMap.value[record.id])
+}
+
+function consumptionColor(kmPerL) {
+  if (!kmPerL) return ''
+  if (kmPerL > 14) return 'cons-good'
+  if (kmPerL > 9) return 'cons-avg'
   return 'cons-poor'
 }
 
@@ -246,14 +264,20 @@ function editRecord(record) {
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
               <div class="tc-right">
                 <span v-if="record.remainingRange != null" class="tc-range" title="Autonomia registrata">⚡</span>
-                <span v-if="record.fullTank === false" class="tc-partial">parziale</span>
-                <span
-                  v-else-if="getConsumptionDisplay(record)"
-                  class="tc-cons"
-                  :class="consumptionClass(record)"
-                >
-                  {{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}
-                </span>
+                <div v-if="getEstimateDisplay(record) || getAccurateDisplay(record)" class="tc-cons-wrap">
+                  <span
+                    v-if="getEstimateDisplay(record)"
+                    class="tc-cons tc-est"
+                    :class="consumptionColor(getEstimateDisplay(record).kmPerL)"
+                    title="Stima: km percorsi / litri del rifornimento precedente"
+                  >≈ {{ getEstimateDisplay(record).value }} {{ getEstimateDisplay(record).unit }}</span>
+                  <span
+                    v-if="getAccurateDisplay(record)"
+                    class="tc-cons tc-acc"
+                    :class="consumptionColor(getAccurateDisplay(record).kmPerL)"
+                    title="Preciso: calcolo tra due pieni completi"
+                  >✓ {{ getAccurateDisplay(record).value }} {{ getAccurateDisplay(record).unit }}</span>
+                </div>
               </div>
             </div>
 
@@ -382,17 +406,20 @@ function editRecord(record) {
 .tc-right { display: flex; align-items: center; gap: 6px; }
 
 .tc-range { font-size: 12px; opacity: 0.6; }
-.tc-partial {
-  font-size: 11px; font-weight: 700;
-  padding: 2px 8px; border-radius: 20px;
-  background: rgba(99,102,241,0.10); color: var(--primary);
+
+.tc-cons-wrap {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
 }
 
 .tc-cons {
   font-size: 11px; font-weight: 700;
   padding: 2px 8px; border-radius: 20px;
   background: var(--bg-secondary); color: var(--text-secondary);
+  white-space: nowrap;
 }
+.tc-est { opacity: 0.65; }
+.tc-acc { opacity: 1; }
+
 .cons-good { background: rgba(16,185,129,0.10); color: #10b981; }
 .cons-avg  { background: rgba(245,158,11,0.10); color: #f59e0b; }
 .cons-poor { background: rgba(239,68,68,0.10);  color: #ef4444; }
