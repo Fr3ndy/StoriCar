@@ -45,7 +45,10 @@ export function useStatistics(vehicleId, filters = null) {
   // Records sorted oldest-first for sequential pairing
   const sortedAscRecords = computed(() => fuelRecords.value.slice().reverse())
 
-  // Enrich each record with effectiveKm
+  // Enrich each record with effectiveKm e affidabilità consumo
+  // Metodo pieno-pieno: il consumo è affidabile solo se il rifornimento corrente
+  // è fullTank=true (o non è specificato, per retrocompatibilità).
+  // Se fullTank=false il record è considerato rifornimento parziale → stima meno affidabile.
   const recordsWithEffectiveKm = computed(() => {
     const allAsc = allFuelRecords.value.slice().reverse()
     return sortedAscRecords.value.map((record) => {
@@ -64,7 +67,22 @@ export function useStatistics(vehicleId, filters = null) {
         if (corrected > 0) effectiveKm = corrected
       }
 
-      return { ...record, effectiveKm }
+      // fullTank: true = pieno completo (consumo affidabile)
+      //           false = rifornimento parziale (stima)
+      //           undefined/null = non specificato (trattato come affidabile per retrocompatibilità)
+      const isFullTank = record.fullTank !== false // true se true o non impostato
+      const isReliableConsumption = isFullTank && effectiveKm > 0 && (record.liters ?? 0) > 0
+
+      // Calcolo consumo puntuale del record (km/L o L/100 gestiti a livello vista)
+      const pointConsumptionKmL = effectiveKm > 0 && (record.liters ?? 0) > 0
+        ? effectiveKm / record.liters
+        : null
+
+      // Warning diagnostico per valori anomali (< 2 km/L o > 50 km/L per benzina/diesel)
+      const isAnomalous = pointConsumptionKmL != null &&
+        (pointConsumptionKmL < 2 || pointConsumptionKmL > 50)
+
+      return { ...record, effectiveKm, isFullTank, isReliableConsumption, pointConsumptionKmL, isAnomalous }
     })
   })
 
@@ -81,21 +99,46 @@ export function useStatistics(vehicleId, filters = null) {
     recordsWithEffectiveKm.value.reduce((sum, r) => sum + (r.effectiveKm || 0), 0)
   )
 
+  // ── Consumo medio: metodo pieno-pieno (affidabile) ────────────────────────
+  // Usa solo i record con isReliableConsumption=true per il valore "ufficiale".
+  // Se non ci sono record affidabili, cade su tutti i record con km > 0.
+  const reliableRecords = computed(() =>
+    recordsWithEffectiveKm.value.filter(r => r.isReliableConsumption)
+  )
+
+  const totalKmReliable = computed(() =>
+    reliableRecords.value.reduce((s, r) => s + r.effectiveKm, 0)
+  )
+  const totalLitersReliable = computed(() =>
+    reliableRecords.value.reduce((s, r) => s + (r.liters || 0), 0)
+  )
+
+  // true = consumo basato su dati pieno-pieno; false = stima su tutti i dati
+  const consumptionIsReliable = computed(() =>
+    totalKmReliable.value > 0 && totalLitersReliable.value > 0
+  )
+
   const averageConsumption = computed(() => {
+    if (consumptionIsReliable.value) {
+      return totalKmReliable.value / totalLitersReliable.value
+    }
+    // Fallback su tutti i km/litri se non ci sono pieni completi
     if (totalKmDriven.value === 0 || totalLiters.value === 0) return 0
     return totalKmDriven.value / totalLiters.value
   })
 
   const averageConsumptionPer100km = computed(() => {
-    if (totalKmDriven.value === 0 || totalLiters.value === 0) return 0
-    return (totalLiters.value / totalKmDriven.value) * 100
+    const kmL = averageConsumption.value
+    if (!kmL) return 0
+    return 100 / kmL
   })
 
   const formattedConsumption = computed(() => {
+    const isReliable = consumptionIsReliable.value
     if (consumptionUnit.value === 'L100km') {
-      return { value: averageConsumptionPer100km.value, unit: 'L/100km' }
+      return { value: averageConsumptionPer100km.value, unit: 'L/100km', reliable: isReliable }
     }
-    return { value: averageConsumption.value, unit: 'km/L' }
+    return { value: averageConsumption.value, unit: 'km/L', reliable: isReliable }
   })
 
   const averagePricePerLiter = computed(() => {
@@ -400,6 +443,7 @@ export function useStatistics(vehicleId, filters = null) {
     averageConsumption,
     averageConsumptionPer100km,
     formattedConsumption,
+    consumptionIsReliable,   // true = basato su pieni completi
     averagePricePerLiter,
     costPerKm,
     averageFuelSpentPerMonth,

@@ -7,18 +7,49 @@ const loading = ref(false)
 const error = ref(null)
 const lastFetch = ref(null)
 
+// Raggio massimo consentito (spec Storicar)
+const MAX_RADIUS_KM = 100
+
+/** Verifica che lat/lng siano numeri nei range geografici validi */
+function isValidCoord(lat, lng) {
+  return (
+    lat != null && lng != null &&
+    typeof lat === 'number' && typeof lng === 'number' &&
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180
+  )
+}
+
 export function useFuelPrices() {
 
   async function fetchPrices({ lat = null, lng = null, km = null, refresh = false } = {}) {
+    // ── Validazione coordinate obbligatoria ─────────────────────────────
+    const latNum = lat != null ? Number(lat) : null
+    const lngNum = lng != null ? Number(lng) : null
+
+    if (!isValidCoord(latNum, lngNum)) {
+      // Diagnostica in console (utile per debug, non esposta in UI)
+      console.warn('[useFuelPrices] Chiamata bloccata: coordinate non valide.', {
+        lat, lng,
+        motivo: lat == null || lng == null ? 'coordinate null/undefined' : 'valori fuori range o non numerici'
+      })
+      // Non impostare error.value qui: il chiamante gestisce il messaggio UI
+      return null
+    }
+
+    // ── Cap raggio a MAX_RADIUS_KM ───────────────────────────────────────
+    const radiusKm = km != null ? Math.min(Math.max(1, Number(km)), MAX_RADIUS_KM) : MAX_RADIUS_KM
+
     loading.value = true
     error.value = null
 
     // Filtriamo solo per GPS lato server (riduce il payload se km piccolo)
     // carburante e comune vengono filtrati lato client per reattività istantanea
     const params = new URLSearchParams()
-    if (lat)     params.set('lat', lat)
-    if (lng)     params.set('lng', lng)
-    if (km)      params.set('km', km)
+    params.set('lat', latNum)
+    params.set('lng', lngNum)
+    params.set('km', radiusKm)
     if (refresh) params.set('refresh', '1')
     params.set('max', '500')
 

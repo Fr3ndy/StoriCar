@@ -8,39 +8,119 @@ import { useStorage } from '../composables/useStorage'
 import { useAuth } from '../composables/useAuth'
 import AuthWall from '../components/AuthWall.vue'
 
-const { getSetting } = useStorage()
+const { getSetting, data: storageData } = useStorage()
 const { isGuest } = useAuth()
 
 // ── Stato ─────────────────────────────────────────────────────────────────────
-const loading      = ref(false)
-const error        = ref(null)
-const data         = ref(null)
-const userLat      = ref(null)
-const userLng      = ref(null)
-const locating     = ref(false)
-const selectedId   = ref(null)
-const selectedFuel = ref('Benzina')
+const loading         = ref(false)
+const error           = ref(null)
+const data            = ref(null)
+const userLat         = ref(null)
+const userLng         = ref(null)
+const locating        = ref(false)
+const selectedId      = ref(null)
+const selectedFuel    = ref('Benzina')
+// Messaggio contestuale sulla fonte delle coordinate
+const coordSource     = ref(null) // null | 'gps' | 'settings' | 'lastRefuel' | 'manual'
 
-// Impostazioni area mappa
-function getMapParams() {
-  const lat = getSetting('fuelMapLat')
-  const lng = getSetting('fuelMapLng')
-  const km  = getSetting('fuelMapRadius') ?? 10
-  return { lat, lng, km }
+// ── Raggio: cap a 100 km, fallback 100 se null/0 ──────────────────────────────
+function getRadius() {
+  const raw = getSetting('fuelMapRadius')
+  if (!raw || raw <= 0) return 100
+  return Math.min(raw, 100)
 }
 
-// Mappa
+// ── Validazione coordinate ─────────────────────────────────────────────────────
+function isValidCoord(lat, lng) {
+  return (
+    lat != null && lng != null &&
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180
+  )
+}
+
+// ── Mappa ─────────────────────────────────────────────────────────────────────
 const mapContainer = ref(null)
 let map            = null
 let clusterLayer   = null
 let userMarker     = null
 const markers      = {}
 
-// ── GPS dal client ─────────────────────────────────────────────────────────────
+// ── GPS dispositivo ───────────────────────────────────────────────────────────
 async function getPosition() {
   return new Promise((res, rej) =>
     navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
   )
+}
+
+// ── Strategia fallback coordinate ─────────────────────────────────────────────
+// Priorità: 1) coordinate manuali già in userLat/userLng
+//            2) settings.fuelMapLat / fuelMapLng
+//            3) geolocalizzazione dispositivo
+//            4) ultimo rifornimento con coordinate
+//            5) nessuna chiamata API
+async function resolveCoordinates() {
+  // 1. Coordinate già acquisite manualmente (tramite locateMe)
+  if (isValidCoord(userLat.value, userLng.value)) {
+    console.info('[FuelPrices] Fonte coordinate: manuale (già presenti)', { lat: userLat.value, lng: userLng.value })
+    coordSource.value = 'manual'
+    return { lat: userLat.value, lng: userLng.value }
+  }
+
+  // 2. Settings salvate dall'utente
+  const settingsLat = getSetting('fuelMapLat')
+  const settingsLng = getSetting('fuelMapLng')
+  if (isValidCoord(Number(settingsLat), Number(settingsLng))) {
+    console.info('[FuelPrices] Fonte coordinate: settings', { settingsLat, settingsLng })
+    userLat.value = Number(settingsLat)
+    userLng.value = Number(settingsLng)
+    coordSource.value = 'settings'
+    return { lat: userLat.value, lng: userLng.value }
+  } else {
+    console.info('[FuelPrices] settings.fuelMapLat/Lng non validi:', { settingsLat, settingsLng })
+  }
+
+  // 3. Geolocalizzazione dispositivo
+  if (navigator.geolocation) {
+    locating.value = true
+    try {
+      const pos = await getPosition()
+      userLat.value = pos.coords.latitude
+      userLng.value = pos.coords.longitude
+      console.info('[FuelPrices] Fonte coordinate: GPS dispositivo', { lat: userLat.value, lng: userLng.value })
+      coordSource.value = 'gps'
+      return { lat: userLat.value, lng: userLng.value }
+    } catch (geoErr) {
+      console.warn('[FuelPrices] Geolocalizzazione fallita:', geoErr.message)
+    } finally {
+      locating.value = false
+    }
+  }
+
+  // 4. Ultimo rifornimento con coordinate
+  const records = storageData.value?.fuelRecords ?? []
+  const withCoord = records
+    .filter(r => r.location && isValidCoord(Number(r.location.lat), Number(r.location.lng)))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  if (withCoord.length > 0) {
+    const last = withCoord[0]
+    userLat.value = Number(last.location.lat)
+    userLng.value = Number(last.location.lng)
+    console.info('[FuelPrices] Fonte coordinate: ultimo rifornimento', { lat: userLat.value, lng: userLng.value, date: last.date })
+    coordSource.value = 'lastRefuel'
+    return { lat: userLat.value, lng: userLng.value }
+  }
+
+  // 5. Nessuna fonte disponibile
+  console.warn('[FuelPrices] Nessuna fonte coordinate disponibile. Chiamata API bloccata.', {
+    'settings.fuelMapLat': settingsLat,
+    'settings.fuelMapLng': settingsLng,
+    'geolocazione': 'fallita/non disponibile',
+    'ultimi rifornimenti con coordinate': withCoord.length
+  })
+  coordSource.value = null
+  return null
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -55,27 +135,16 @@ async function load(refresh = false) {
   error.value   = null
 
   try {
-    const { km } = getMapParams()
+    const km     = getRadius()
+    const coords = await resolveCoordinates()
 
-    // La posizione la chiede sempre il client via GPS
-    let lat = userLat.value
-    let lng = userLng.value
-
-    if (lat == null || lng == null) {
-      locating.value = true
-      try {
-        const pos = await getPosition()
-        lat = pos.coords.latitude
-        lng = pos.coords.longitude
-        userLat.value = lat
-        userLng.value = lng
-      } catch {
-        throw new Error('Posizione non disponibile. Consenti l\'accesso al GPS e riprova.')
-      } finally {
-        locating.value = false
-      }
+    // Blocco esplicito se coordinate non disponibili
+    if (!coords) {
+      error.value = 'Posizione non disponibile. Impossibile caricare i prezzi carburante.'
+      return
     }
 
+    const { lat, lng } = coords
     const params = new URLSearchParams({ lat, lng, km })
     if (refresh) params.set('refresh', '1')
     const res = await fetch(`${base}?${params}`)
@@ -105,6 +174,65 @@ const allStats   = computed(() => data.value?.stats ?? {})
 const aggiornato = computed(() => data.value?.aggiornato ?? null)
 const totale     = computed(() => data.value?.totale ?? 0)
 const carburanti = computed(() => data.value?.carburanti ?? ['Benzina', 'Gasolio'])
+
+// ── Warning prezzi non aggiornati ─────────────────────────────────────────────
+const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
+
+/**
+ * Restituisce true se la data del prezzo (stringa DD/MM/YYYY o ISO) è oggi.
+ * Ritorna false se la data è assente o non parseable (considerata non aggiornata).
+ */
+function isPriceToday(dateStr) {
+  if (!dateStr) return false
+  // Supporta sia DD/MM/YYYY che YYYY-MM-DD
+  let isoDate = dateStr
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+    const [d, m, y] = dateStr.split('/')
+    isoDate = `${y}-${m}-${d}`
+  }
+  return isoDate === todayStr
+}
+
+/**
+ * Controlla se almeno uno dei prezzi di un impianto è aggiornato oggi.
+ * Restituisce anche la data più recente trovata tra i prezzi del carburante selezionato.
+ */
+function impiantoDateInfo(imp) {
+  const prezzi = imp.prezzi ?? {}
+  let anyToday = false
+  let latestDate = null
+  for (const [, p] of Object.entries(prezzi)) {
+    if (p.data) {
+      if (isPriceToday(p.data)) anyToday = true
+      if (!latestDate || p.data > latestDate) latestDate = p.data
+    }
+  }
+  return { anyToday, latestDate }
+}
+
+/**
+ * Warning GLOBALE: true solo se NESSUN impianto ha prezzi aggiornati oggi.
+ * Se almeno uno è aggiornato, non mostrare il warning globale.
+ */
+const hasGlobalPriceWarning = computed(() => {
+  if (!impianti.value.length) return false
+  return !impianti.value.some(imp => impiantoDateInfo(imp).anyToday)
+})
+
+/**
+ * Per ciascun impianto, restituisce la data formattata se non è aggiornata oggi.
+ * Usato per il badge "Prezzo non aggiornato" sul singolo distributore.
+ */
+function getImpiantoWarning(imp) {
+  const { anyToday, latestDate } = impiantoDateInfo(imp)
+  if (anyToday || !latestDate) return null
+  // Formatta in DD/MM/YYYY se necessario
+  if (/^\d{4}-\d{2}-\d{2}/.test(latestDate)) {
+    const [y, m, d] = latestDate.split('-')
+    return `Dato del ${d}/${m}/${y}`
+  }
+  return `Dato del ${latestDate}`
+}
 
 const statsFuel  = computed(() => allStats.value[selectedFuel.value] ?? null)
 const mediaself  = computed(() => statsFuel.value?.self?.media ?? null)
@@ -328,6 +456,18 @@ watch(selectedId, (newId, oldId) => {
       <button @click="load(true)">Riprova</button>
     </div>
 
+    <!-- Info fonte coordinate (solo se fallback ultimo rifornimento) -->
+    <div v-if="coordSource === 'lastRefuel' && !error" class="info-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Prezzi vicino all'ultimo rifornimento registrato
+    </div>
+
+    <!-- Warning globale prezzi non aggiornati -->
+    <div v-if="hasGlobalPriceWarning && !error && impianti.length" class="warning-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      Attenzione: i prezzi carburante disponibili non sono aggiornati a oggi e potrebbero non essere più validi.
+    </div>
+
     <!-- Mappa con selettore carburante compatto sovrapposto -->
     <div class="map-wrap">
       <div ref="mapContainer" class="map-container"></div>
@@ -381,8 +521,13 @@ watch(selectedId, (newId, oldId) => {
             </div>
           </template>
         </div>
+        <!-- Data aggiornamento + warning se non aggiornato oggi -->
         <div class="panel-meta" v-if="selectedImp.prezzi?.[selectedFuel]?.data">
           Agg. {{ selectedImp.prezzi[selectedFuel].data }}
+          <span
+            v-if="!isPriceToday(selectedImp.prezzi[selectedFuel].data)"
+            class="price-outdated-badge"
+          >Prezzo non aggiornato</span>
         </div>
       </div>
     </Transition>
@@ -668,4 +813,35 @@ watch(selectedId, (newId, oldId) => {
 /* Transizione pannello */
 .slide-up-enter-active, .slide-up-leave-active { transition: all 0.2s cubic-bezier(0.32,0.72,0,1); }
 .slide-up-enter-from, .slide-up-leave-to { opacity: 0; transform: translateY(10px); }
+
+/* Warning banner: prezzi non aggiornati (globale) */
+.warning-banner {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(234,179,8,0.10); border: 1px solid rgba(234,179,8,0.35);
+  border-radius: 12px; padding: 12px 14px;
+  font-size: 13px; color: #92400e;
+}
+.warning-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: #d97706; margin-top: 1px; }
+
+/* Info banner: fonte coordinate (es. ultimo rifornimento) */
+.info-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 12px; padding: 10px 14px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.info-banner svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--primary); }
+
+/* Badge "Prezzo non aggiornato" nel dettaglio stazione */
+.price-outdated-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(234,179,8,0.15);
+  color: #92400e;
+  vertical-align: middle;
+}
 </style>

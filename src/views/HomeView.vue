@@ -4,17 +4,91 @@ import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 import { useStatistics } from '../composables/useStatistics'
 
-// Fuel prices widget
+const router = useRouter()
+const { data, dataReady, getDefaultVehicleId, setDefaultVehicle, getDeadlinesByVehicle } = useStorage()
+
+// ── Widget prezzi carburante ──────────────────────────────────────────────────
+// Richiede coordinate valide: cerca prima in settings, poi nel GPS, poi nell'ultimo rifornimento.
+// NON parte senza coordinate (evita request vuote a fuel-prices.php).
 const fuelPricesData = ref(null)
-onMounted(async () => {
+
+function isValidCoordHome(lat, lng) {
+  return lat != null && lng != null &&
+    !isNaN(Number(lat)) && !isNaN(Number(lng)) &&
+    Number(lat) >= -90 && Number(lat) <= 90 &&
+    Number(lng) >= -180 && Number(lng) <= 180
+}
+
+async function loadFuelWidget() {
+  const base = import.meta.env.VITE_FUEL_PRICES_URL
+  if (!base) return // servizio non configurato
+
+  let lat = null, lng = null
+
+  // 1. Settings salvate
+  const sLat = data.value.settings?.fuelMapLat
+  const sLng = data.value.settings?.fuelMapLng
+  if (isValidCoordHome(sLat, sLng)) {
+    lat = Number(sLat); lng = Number(sLng)
+    console.info('[HomeView] Widget prezzi: fonte coordinate = settings')
+  }
+
+  // 2. Geolocalizzazione dispositivo (solo se settings vuote)
+  if (lat == null && navigator.geolocation) {
+    try {
+      const pos = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
+      )
+      lat = pos.coords.latitude; lng = pos.coords.longitude
+      console.info('[HomeView] Widget prezzi: fonte coordinate = GPS')
+    } catch {
+      console.info('[HomeView] Widget prezzi: GPS non disponibile')
+    }
+  }
+
+  // 3. Ultimo rifornimento con coordinate
+  if (lat == null) {
+    const records = data.value.fuelRecords ?? []
+    const withCoord = records
+      .filter(r => r.location && isValidCoordHome(r.location.lat, r.location.lng))
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+    if (withCoord.length) {
+      lat = Number(withCoord[0].location.lat)
+      lng = Number(withCoord[0].location.lng)
+      console.info('[HomeView] Widget prezzi: fonte coordinate = ultimo rifornimento')
+    }
+  }
+
+  // 4. Nessuna fonte: non chiamare l'API
+  if (!isValidCoordHome(lat, lng)) {
+    console.warn('[HomeView] Widget prezzi: nessuna coordinata disponibile, chiamata bloccata.', {
+      'settings.fuelMapLat': sLat,
+      'settings.fuelMapLng': sLng,
+    })
+    return
+  }
+
   try {
-    const res = await fetch(import.meta.env.VITE_FUEL_PRICES_URL || './fuel-prices.php')
+    const km = Math.min(data.value.settings?.fuelMapRadius || 100, 100)
+    const params = new URLSearchParams({ lat, lng, km })
+    const res = await fetch(`${base}?${params}`)
     if (res.ok) {
       const json = await res.json()
       if (json.ok) fuelPricesData.value = json
     }
   } catch {}
-})
+}
+
+// Carica il widget prezzi solo quando i dati utente sono pronti.
+// Evita request con settings ancora null (sequenza: mount → dataReady → loadFuelWidget).
+let widgetLoaded = false
+watch(dataReady, async (ready) => {
+  if (ready && !widgetLoaded) {
+    widgetLoaded = true
+    await loadFuelWidget()
+  }
+}, { immediate: true })
+
 const prezziWidget = computed(() => {
   if (!fuelPricesData.value?.stats) return []
   return Object.entries(fuelPricesData.value.stats)
@@ -22,9 +96,6 @@ const prezziWidget = computed(() => {
     .map(([nome, s]) => ({ nome, min: s.self.min, media: s.self.media }))
     .slice(0, 3)
 })
-
-const router = useRouter()
-const { data, dataReady, getDefaultVehicleId, setDefaultVehicle, getDeadlinesByVehicle } = useStorage()
 
 const selectedVehicleId = ref(null)
 const vehicles           = computed(() => data.value.vehicles)

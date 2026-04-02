@@ -95,11 +95,21 @@ function formatMonthShort(dateStr) {
 
 function getConsumptionDisplay(record) {
   const km = record.kmDriven
-  if (!km || !record.liters || km <= 0) return null
+  // Richiede km > 0 e litri > 0 (non usare valori nulli o zero)
+  if (!km || !record.liters || km <= 0 || record.liters <= 0) return null
+
+  const kmPerL = km / record.liters
+  // Warning diagnostico per valori anomali
+  const isAnomalous = kmPerL < 2 || kmPerL > 50
+
+  // fullTank=false → rifornimento parziale, consumo è una stima
+  const isEstimate = record.fullTank === false
+
   if (data.value.settings.consumptionUnit === 'L100km') {
-    return { value: ((record.liters / km) * 100).toFixed(1), unit: 'L/100' }
+    const val = ((record.liters / km) * 100).toFixed(1)
+    return { value: val, unit: 'L/100', isEstimate, isAnomalous }
   }
-  return { value: (km / record.liters).toFixed(1), unit: 'km/L' }
+  return { value: kmPerL.toFixed(1), unit: 'km/L', isEstimate, isAnomalous }
 }
 
 function consumptionClass(record) {
@@ -208,13 +218,26 @@ function editRecord(record) {
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
               <div class="tc-right">
                 <span v-if="record.remainingRange != null" class="tc-range" title="Autonomia registrata">⚡</span>
-                <span
-                  v-if="getConsumptionDisplay(record)"
-                  class="tc-cons"
-                  :class="consumptionClass(record)"
-                >
-                  {{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}
-                </span>
+                <template v-if="getConsumptionDisplay(record)">
+                  <!-- Warning: valore anomalo (< 2 o > 50 km/L) -->
+                  <span
+                    v-if="getConsumptionDisplay(record).isAnomalous"
+                    class="tc-cons cons-anomaly"
+                    title="Valore anomalo: verifica km percorsi e litri"
+                  >⚠ {{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}</span>
+                  <!-- Valore normale -->
+                  <span
+                    v-else
+                    class="tc-cons"
+                    :class="consumptionClass(record)"
+                  >{{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}</span>
+                  <!-- Badge stima: rifornimento parziale -->
+                  <span
+                    v-if="getConsumptionDisplay(record).isEstimate"
+                    class="tc-cons-estimate"
+                    title="Rifornimento parziale: consumo stimato, non affidabile come media"
+                  >stima</span>
+                </template>
               </div>
             </div>
 
@@ -352,6 +375,15 @@ function editRecord(record) {
 .cons-good { background: rgba(16,185,129,0.10); color: #10b981; }
 .cons-avg  { background: rgba(245,158,11,0.10); color: #f59e0b; }
 .cons-poor { background: rgba(239,68,68,0.10);  color: #ef4444; }
+/* Valore anomalo (fuori range plausibile) */
+.cons-anomaly { background: rgba(239,68,68,0.10); color: #ef4444; }
+/* Badge rifornimento parziale / stima */
+.tc-cons-estimate {
+  font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: 20px;
+  background: rgba(245,158,11,0.12); color: #b45309;
+  border: 1px solid rgba(245,158,11,0.3);
+}
 
 /* Detail chips */
 .tc-chips {
