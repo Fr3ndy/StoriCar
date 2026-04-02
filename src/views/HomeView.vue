@@ -4,17 +4,92 @@ import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 import { useStatistics } from '../composables/useStatistics'
 
-// Fuel prices widget
+const router = useRouter()
+const { data, dataReady, getDefaultVehicleId, setDefaultVehicle, getDeadlinesByVehicle } = useStorage()
+
+// ── Widget prezzi carburante ──────────────────────────────────────────────────
+// Richiede coordinate valide: cerca prima in settings, poi nel GPS, poi nell'ultimo rifornimento.
+// NON parte senza coordinate (evita request vuote a fuel-prices.php).
 const fuelPricesData = ref(null)
-onMounted(async () => {
+
+function isValidCoordHome(lat, lng) {
+  if (lat == null || lng == null) return false
+  const n_lat = Number(lat), n_lng = Number(lng)
+  if (isNaN(n_lat) || isNaN(n_lng)) return false
+  if (n_lat === 0 && n_lng === 0) return false // (0,0) = non impostato
+  return n_lat >= -90 && n_lat <= 90 && n_lng >= -180 && n_lng <= 180
+}
+
+async function loadFuelWidget() {
+  const base = import.meta.env.VITE_FUEL_PRICES_URL
+  if (!base) return // servizio non configurato
+
+  let lat = null, lng = null
+
+  // 1. Settings salvate
+  const sLat = data.value.settings?.fuelMapLat
+  const sLng = data.value.settings?.fuelMapLng
+  if (isValidCoordHome(sLat, sLng)) {
+    lat = Number(sLat); lng = Number(sLng)
+    console.info('[HomeView] Widget prezzi: fonte coordinate = settings')
+  }
+
+  // 2. Geolocalizzazione dispositivo (solo se settings vuote)
+  if (lat == null && navigator.geolocation) {
+    try {
+      const pos = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
+      )
+      lat = pos.coords.latitude; lng = pos.coords.longitude
+      console.info('[HomeView] Widget prezzi: fonte coordinate = GPS')
+    } catch {
+      console.info('[HomeView] Widget prezzi: GPS non disponibile')
+    }
+  }
+
+  // 3. Ultimo rifornimento con coordinate
+  if (lat == null) {
+    const records = data.value.fuelRecords ?? []
+    const withCoord = records
+      .filter(r => r.location && isValidCoordHome(r.location.lat, r.location.lng))
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+    if (withCoord.length) {
+      lat = Number(withCoord[0].location.lat)
+      lng = Number(withCoord[0].location.lng)
+      console.info('[HomeView] Widget prezzi: fonte coordinate = ultimo rifornimento')
+    }
+  }
+
+  // 4. Nessuna fonte: non chiamare l'API
+  if (!isValidCoordHome(lat, lng)) {
+    console.warn('[HomeView] Widget prezzi: nessuna coordinata disponibile, chiamata bloccata.', {
+      'settings.fuelMapLat': sLat,
+      'settings.fuelMapLng': sLng,
+    })
+    return
+  }
+
   try {
-    const res = await fetch(import.meta.env.VITE_FUEL_PRICES_URL || './fuel-prices.php')
+    const km = Math.min(data.value.settings?.fuelMapRadius || 100, 100)
+    const params = new URLSearchParams({ lat, lng, km })
+    const res = await fetch(`${base}?${params}`)
     if (res.ok) {
       const json = await res.json()
       if (json.ok) fuelPricesData.value = json
     }
   } catch {}
-})
+}
+
+// Carica il widget prezzi solo quando i dati utente sono pronti.
+// Evita request con settings ancora null (sequenza: mount → dataReady → loadFuelWidget).
+let widgetLoaded = false
+watch(dataReady, async (ready) => {
+  if (ready && !widgetLoaded) {
+    widgetLoaded = true
+    await loadFuelWidget()
+  }
+}, { immediate: true })
+
 const prezziWidget = computed(() => {
   if (!fuelPricesData.value?.stats) return []
   return Object.entries(fuelPricesData.value.stats)
@@ -22,9 +97,6 @@ const prezziWidget = computed(() => {
     .map(([nome, s]) => ({ nome, min: s.self.min, media: s.self.media }))
     .slice(0, 3)
 })
-
-const router = useRouter()
-const { data, dataReady, getDefaultVehicleId, setDefaultVehicle, getDeadlinesByVehicle } = useStorage()
 
 const selectedVehicleId = ref(null)
 const vehicles           = computed(() => data.value.vehicles)
@@ -115,7 +187,15 @@ function dlLabel(dl) {
     <div v-else class="dashboard">
 
       <!-- Vehicle card -->
-      <div class="vehicle-card">
+      <div class="vehicle-card" :class="{ 'has-cover': stats.vehicle.value?.coverImageUrl }">
+        <!-- Blurred cover background (shown only when a cover image exists) -->
+        <div
+          v-if="stats.vehicle.value?.coverImageUrl"
+          class="vc-cover"
+          :style="{ backgroundImage: `url(${stats.vehicle.value.coverImageUrl})` }"
+        ></div>
+        <div v-if="stats.vehicle.value?.coverImageUrl" class="vc-cover-overlay"></div>
+
         <div class="vc-top">
           <div class="vc-icon">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -351,7 +431,39 @@ function dlLabel(dl) {
 .vc-odo-num { font-size: 40px; font-weight: 900; color: var(--text-primary); letter-spacing: -2px; line-height: 1; }
 .vc-odo-unit { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
 
-.vc-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; }
+.vc-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; z-index: 3; }
+
+/* ── Cover image blur effect ── */
+.vc-cover {
+  position: absolute;
+  inset: -8px;                        /* bleed beyond card edges so blur doesn't show white border */
+  background-size: cover;
+  background-position: center;
+  /* filter: blur(18px); */
+  transform: scale(1.08);             /* slight zoom to mask edge artifacts from blur */
+  z-index: 0;
+}
+
+.vc-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(150deg, rgba(0,0,0,0.58) 0%, rgba(0,0,0,0.38) 100%);
+  z-index: 1;
+}
+
+/* Lift text content above the overlay */
+.has-cover .vc-top,
+.has-cover .vc-odo { position: relative; z-index: 2; }
+
+/* White text when cover is active */
+.has-cover .vc-name                { color: #fff; }
+.has-cover .vc-sub                 { color: rgba(255,255,255,0.72); }
+.has-cover .vc-sub strong          { color: #fff; }
+.has-cover .vc-chevron             { color: rgba(255,255,255,0.55); }
+.has-cover .vc-odo-num             { color: #fff; }
+.has-cover .vc-odo-unit            { color: rgba(255,255,255,0.72); }
+.has-cover .vc-icon                { background: rgba(255,255,255,0.18); color: #fff; }
+[data-theme="dark"] .has-cover .vc-icon { background: rgba(255,255,255,0.14); color: #fff; }
 
 /* ── Quick actions ── */
 .actions-grid {

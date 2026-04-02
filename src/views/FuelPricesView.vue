@@ -8,39 +8,119 @@ import { useStorage } from '../composables/useStorage'
 import { useAuth } from '../composables/useAuth'
 import AuthWall from '../components/AuthWall.vue'
 
-const { getSetting } = useStorage()
+const { getSetting, data: storageData } = useStorage()
 const { isGuest } = useAuth()
 
 // ── Stato ─────────────────────────────────────────────────────────────────────
-const loading      = ref(false)
-const error        = ref(null)
-const data         = ref(null)
-const userLat      = ref(null)
-const userLng      = ref(null)
-const locating     = ref(false)
-const selectedId   = ref(null)
-const selectedFuel = ref('Benzina')
+const loading         = ref(false)
+const error           = ref(null)
+const data            = ref(null)
+const userLat         = ref(null)
+const userLng         = ref(null)
+const locating        = ref(false)
+const selectedId      = ref(null)
+const selectedFuel    = ref('Benzina')
+// Messaggio contestuale sulla fonte delle coordinate
+const coordSource     = ref(null) // null | 'gps' | 'settings' | 'lastRefuel' | 'manual'
 
-// Impostazioni area mappa
-function getMapParams() {
-  const lat = getSetting('fuelMapLat')
-  const lng = getSetting('fuelMapLng')
-  const km  = getSetting('fuelMapRadius') ?? 10
-  return { lat, lng, km }
+// ── Raggio: cap a 100 km, fallback 100 se null/0 ──────────────────────────────
+function getRadius() {
+  const raw = getSetting('fuelMapRadius')
+  if (!raw || raw <= 0) return 100
+  return Math.min(raw, 100)
 }
 
-// Mappa
+// ── Validazione coordinate ─────────────────────────────────────────────────────
+function isValidCoord(lat, lng) {
+  // Rifiuta null, undefined, NaN, e la coppia (0,0) che indica coordinate non impostate
+  if (lat == null || lng == null) return false
+  const n_lat = Number(lat), n_lng = Number(lng)
+  if (isNaN(n_lat) || isNaN(n_lng)) return false
+  if (n_lat === 0 && n_lng === 0) return false // (0,0) = non impostato
+  return n_lat >= -90 && n_lat <= 90 && n_lng >= -180 && n_lng <= 180
+}
+
+// ── Mappa ─────────────────────────────────────────────────────────────────────
 const mapContainer = ref(null)
 let map            = null
 let clusterLayer   = null
 let userMarker     = null
 const markers      = {}
 
-// ── GPS dal client ─────────────────────────────────────────────────────────────
+// ── GPS dispositivo ───────────────────────────────────────────────────────────
 async function getPosition() {
   return new Promise((res, rej) =>
     navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 })
   )
+}
+
+// ── Strategia fallback coordinate ─────────────────────────────────────────────
+// Priorità: 1) coordinate manuali già in userLat/userLng
+//            2) settings.fuelMapLat / fuelMapLng
+//            3) geolocalizzazione dispositivo
+//            4) ultimo rifornimento con coordinate
+//            5) nessuna chiamata API
+async function resolveCoordinates() {
+  // 1. Coordinate già acquisite manualmente (tramite locateMe)
+  if (isValidCoord(userLat.value, userLng.value)) {
+    console.info('[FuelPrices] Fonte coordinate: manuale (già presenti)', { lat: userLat.value, lng: userLng.value })
+    coordSource.value = 'manual'
+    return { lat: userLat.value, lng: userLng.value }
+  }
+
+  // 2. Settings salvate dall'utente
+  const settingsLat = getSetting('fuelMapLat')
+  const settingsLng = getSetting('fuelMapLng')
+  if (isValidCoord(Number(settingsLat), Number(settingsLng))) {
+    console.info('[FuelPrices] Fonte coordinate: settings', { settingsLat, settingsLng })
+    userLat.value = Number(settingsLat)
+    userLng.value = Number(settingsLng)
+    coordSource.value = 'settings'
+    return { lat: userLat.value, lng: userLng.value }
+  } else {
+    console.info('[FuelPrices] settings.fuelMapLat/Lng non validi:', { settingsLat, settingsLng })
+  }
+
+  // 3. Geolocalizzazione dispositivo
+  if (navigator.geolocation) {
+    locating.value = true
+    try {
+      const pos = await getPosition()
+      userLat.value = pos.coords.latitude
+      userLng.value = pos.coords.longitude
+      console.info('[FuelPrices] Fonte coordinate: GPS dispositivo', { lat: userLat.value, lng: userLng.value })
+      coordSource.value = 'gps'
+      return { lat: userLat.value, lng: userLng.value }
+    } catch (geoErr) {
+      console.warn('[FuelPrices] Geolocalizzazione fallita:', geoErr.message)
+    } finally {
+      locating.value = false
+    }
+  }
+
+  // 4. Ultimo rifornimento con coordinate
+  const records = storageData.value?.fuelRecords ?? []
+  const withCoord = records
+    .filter(r => r.location && isValidCoord(Number(r.location.lat), Number(r.location.lng)))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  if (withCoord.length > 0) {
+    const last = withCoord[0]
+    userLat.value = Number(last.location.lat)
+    userLng.value = Number(last.location.lng)
+    console.info('[FuelPrices] Fonte coordinate: ultimo rifornimento', { lat: userLat.value, lng: userLng.value, date: last.date })
+    coordSource.value = 'lastRefuel'
+    return { lat: userLat.value, lng: userLng.value }
+  }
+
+  // 5. Nessuna fonte disponibile
+  console.warn('[FuelPrices] Nessuna fonte coordinate disponibile. Chiamata API bloccata.', {
+    'settings.fuelMapLat': settingsLat,
+    'settings.fuelMapLng': settingsLng,
+    'geolocazione': 'fallita/non disponibile',
+    'ultimi rifornimenti con coordinate': withCoord.length
+  })
+  coordSource.value = null
+  return null
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -55,27 +135,16 @@ async function load(refresh = false) {
   error.value   = null
 
   try {
-    const { km } = getMapParams()
+    const km     = getRadius()
+    const coords = await resolveCoordinates()
 
-    // La posizione la chiede sempre il client via GPS
-    let lat = userLat.value
-    let lng = userLng.value
-
-    if (lat == null || lng == null) {
-      locating.value = true
-      try {
-        const pos = await getPosition()
-        lat = pos.coords.latitude
-        lng = pos.coords.longitude
-        userLat.value = lat
-        userLng.value = lng
-      } catch {
-        throw new Error('Posizione non disponibile. Consenti l\'accesso al GPS e riprova.')
-      } finally {
-        locating.value = false
-      }
+    // Blocco esplicito se coordinate non disponibili
+    if (!coords) {
+      error.value = 'Posizione non disponibile. Impossibile caricare i prezzi carburante.'
+      return
     }
 
+    const { lat, lng } = coords
     const params = new URLSearchParams({ lat, lng, km })
     if (refresh) params.set('refresh', '1')
     const res = await fetch(`${base}?${params}`)
@@ -99,12 +168,95 @@ onMounted(async () => {
 
 onUnmounted(() => { if (map) { map.remove(); map = null } })
 
+// ── Famiglie carburanti (chip → nomi API MIMIT equivalenti) ───────────────────
+const FUEL_FAMILIES = {
+  'Benzina': ['Benzina', 'Blue Super', 'HiQ Perform+'],
+  'Gasolio': ['Gasolio', 'Blue Diesel', 'HVOlution', 'HVO', 'Gasolio Premium', 'Supreme Diesel', 'Hi-Q Diesel'],
+  'Metano':  ['Metano'],
+  'GPL':     ['GPL'],
+  'L-GNC':   ['L-GNC'],
+  'GNL':     ['GNL'],
+}
+
 // ── Computed ──────────────────────────────────────────────────────────────────
 const impianti   = computed(() => data.value?.impianti ?? [])
 const allStats   = computed(() => data.value?.stats ?? {})
 const aggiornato = computed(() => data.value?.aggiornato ?? null)
 const totale     = computed(() => data.value?.totale ?? 0)
-const carburanti = computed(() => data.value?.carburanti ?? ['Benzina', 'Gasolio'])
+
+// Chip visibili: solo famiglie per cui l'API ha restituito almeno un membro
+const carburanti = computed(() => {
+  const apiList = data.value?.carburanti ?? ['Benzina', 'Gasolio']
+  return Object.keys(FUEL_FAMILIES).filter(family =>
+    FUEL_FAMILIES[family].some(f => apiList.includes(f))
+  )
+})
+
+// Membri della famiglia del carburante selezionato
+const selectedFamilyMembers = computed(() =>
+  FUEL_FAMILIES[selectedFuel.value] ?? [selectedFuel.value]
+)
+
+// ── Warning prezzi non aggiornati ─────────────────────────────────────────────
+// Data odierna in ora locale (non UTC) → evita sfasamenti dopo mezzanotte
+const todayStr = new Date().toLocaleDateString('sv-SE') // 'YYYY-MM-DD' in locale
+
+/**
+ * Restituisce true se la data del prezzo (stringa DD/MM/YYYY o ISO) è oggi.
+ * Ritorna false se la data è assente o non parseable (considerata non aggiornata).
+ */
+function isPriceToday(dateStr) {
+  if (!dateStr) return false
+  let isoDate = dateStr
+  // Formato DD/MM/YYYY → YYYY-MM-DD
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(dateStr)) {
+    const [d, m, y] = dateStr.split('/')
+    isoDate = `${y}-${m}-${d}`
+  }
+  // Prende solo i primi 10 caratteri (YYYY-MM-DD) ignorando ore/fuso
+  return isoDate.slice(0, 10) === todayStr
+}
+
+/**
+ * Controlla se almeno uno dei prezzi di un impianto è aggiornato oggi.
+ * Restituisce anche la data più recente trovata tra i prezzi del carburante selezionato.
+ */
+function impiantoDateInfo(imp) {
+  const prezzi = imp.prezzi ?? {}
+  let anyToday = false
+  let latestDate = null
+  for (const [, p] of Object.entries(prezzi)) {
+    if (p.data) {
+      if (isPriceToday(p.data)) anyToday = true
+      if (!latestDate || p.data > latestDate) latestDate = p.data
+    }
+  }
+  return { anyToday, latestDate }
+}
+
+/**
+ * Warning GLOBALE: true solo se NESSUN impianto ha prezzi aggiornati oggi.
+ * Se almeno uno è aggiornato, non mostrare il warning globale.
+ */
+const hasGlobalPriceWarning = computed(() => {
+  if (!impianti.value.length) return false
+  return !impianti.value.some(imp => impiantoDateInfo(imp).anyToday)
+})
+
+/**
+ * Per ciascun impianto, restituisce la data formattata se non è aggiornata oggi.
+ * Usato per il badge "Prezzo non aggiornato" sul singolo distributore.
+ */
+function getImpiantoWarning(imp) {
+  const { anyToday, latestDate } = impiantoDateInfo(imp)
+  if (anyToday || !latestDate) return null
+  // Formatta in DD/MM/YYYY se necessario
+  if (/^\d{4}-\d{2}-\d{2}/.test(latestDate)) {
+    const [y, m, d] = latestDate.split('-')
+    return `Dato del ${d}/${m}/${y}`
+  }
+  return `Dato del ${latestDate}`
+}
 
 const statsFuel  = computed(() => allStats.value[selectedFuel.value] ?? null)
 const mediaself  = computed(() => statsFuel.value?.self?.media ?? null)
@@ -119,7 +271,12 @@ function fmt(n) {
 }
 
 function getSelf(imp) {
-  return imp.prezzi?.[selectedFuel.value]?.self ?? null
+  let best = null
+  for (const m of selectedFamilyMembers.value) {
+    const p = imp.prezzi?.[m]?.self ?? null
+    if (p != null && (best === null || p < best)) best = p
+  }
+  return best
 }
 
 function prezzoColore(selfVal) {
@@ -130,10 +287,15 @@ function prezzoColore(selfVal) {
 }
 
 function prezzoLabel(imp) {
-  const p = imp.prezzi?.[selectedFuel.value]
-  if (!p) return '?'
-  if (p.self != null) return fmt(p.self)
-  if (p.servito != null) return fmt(p.servito)
+  let bestSelf = null, bestServ = null
+  for (const m of selectedFamilyMembers.value) {
+    const p = imp.prezzi?.[m]
+    if (!p) continue
+    if (p.self != null && (bestSelf === null || p.self < bestSelf)) bestSelf = p.self
+    if (p.servito != null && (bestServ === null || p.servito < bestServ)) bestServ = p.servito
+  }
+  if (bestSelf != null) return fmt(bestSelf)
+  if (bestServ != null) return fmt(bestServ)
   return '?'
 }
 
@@ -172,7 +334,8 @@ function initMap() {
   const center = userLat.value != null
     ? [userLat.value, userLng.value]
     : [41.90, 12.49] // fallback solo visivo, nessuna richiesta API senza GPS
-  map = L.map(mapContainer.value, { zoomControl: true }).setView(center, 12)
+  map = L.map(mapContainer.value, { zoomControl: false }).setView(center, 12)
+  L.control.zoom({ position: 'topright' }).addTo(map)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
     maxZoom: 19,
@@ -285,6 +448,24 @@ function closePanel() {
   if (prev) refreshMarkerIcon(prev)
 }
 
+// Data aggiornamento: primo membro della famiglia con data disponibile
+function panelDate(imp) {
+  for (const m of selectedFamilyMembers.value) {
+    const d = imp?.prezzi?.[m]?.data
+    if (d) return d
+  }
+  return null
+}
+
+// Stats per famiglia: primo membro con dati self disponibili
+function familyStats(family) {
+  const members = FUEL_FAMILIES[family] ?? [family]
+  for (const m of members) {
+    if (allStats.value[m]?.self) return allStats.value[m]
+  }
+  return null
+}
+
 watch(selectedId, (newId, oldId) => {
   if (oldId) refreshMarkerIcon(oldId)
   if (newId) refreshMarkerIcon(newId)
@@ -304,28 +485,24 @@ watch(selectedId, (newId, oldId) => {
     />
 
     <template v-if="!isGuest">
-    <!-- Barra in alto: GPS + refresh + meta -->
-    <div class="top-bar">
-      <div class="top-meta">
-        <span v-if="loading" class="spinner-sm"></span>
-        <span v-if="aggiornato && !loading">{{ totale }} impianti · agg. {{ aggiornato }}</span>
-        <span v-else-if="loading">Caricamento...</span>
-      </div>
-      <div class="top-actions">
-        <button class="icon-btn" @click="locateMe" :disabled="locating" :class="{ active: userLat }" title="Vai alla mia posizione">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        </button>
-        <button class="icon-btn" @click="load(true)" :disabled="loading" title="Aggiorna dati">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-        </button>
-      </div>
-    </div>
 
     <!-- Errore -->
     <div v-if="error" class="error-banner">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       {{ error }}
       <button @click="load(true)">Riprova</button>
+    </div>
+
+    <!-- Info fonte coordinate (solo se fallback ultimo rifornimento) -->
+    <div v-if="coordSource === 'lastRefuel' && !error" class="info-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Prezzi vicino all'ultimo rifornimento registrato
+    </div>
+
+    <!-- Warning globale prezzi non aggiornati -->
+    <div v-if="hasGlobalPriceWarning && !error && impianti.length" class="warning-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      Attenzione: i prezzi carburante disponibili non sono aggiornati a oggi e potrebbero non essere più validi.
     </div>
 
     <!-- Mappa con selettore carburante compatto sovrapposto -->
@@ -346,6 +523,23 @@ watch(selectedId, (newId, oldId) => {
         <span class="leg-dot" style="background:#16a34a"></span>Conveniente
         <span class="leg-dot" style="background:#d97706"></span>Media
         <span class="leg-dot" style="background:#dc2626"></span>Caro
+      </div>
+    </div>
+
+    <!-- Barra in alto: GPS + refresh + meta -->
+    <div class="top-bar">
+      <div class="top-meta">
+        <span v-if="loading" class="spinner-sm"></span>
+        <span v-if="aggiornato && !loading">{{ totale }} impianti · agg. {{ aggiornato }}</span>
+        <span v-else-if="loading">Caricamento...</span>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" @click="locateMe" :disabled="locating" :class="{ active: userLat }" title="Vai alla mia posizione">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </button>
+        <button class="icon-btn" @click="load(true)" :disabled="loading" title="Aggiorna dati">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
       </div>
     </div>
 
@@ -370,49 +564,57 @@ watch(selectedId, (newId, oldId) => {
           </button>
         </div>
         <div class="panel-prices">
-          <template v-for="(p, carb) in selectedImp.prezzi" :key="carb">
-            <div v-if="p.self != null" class="panel-price-row" :class="{ 'is-selected-fuel': carb === selectedFuel }">
-              <span class="panel-price-type">{{ carb }} <span class="price-mode">self</span></span>
-              <span class="panel-price-val" :style="{ color: carb === selectedFuel ? prezzoColore(p.self) : 'var(--text-secondary)' }">{{ fmt(p.self) }} €/L</span>
-            </div>
-            <div v-if="p.servito != null" class="panel-price-row panel-price-row-sm">
-              <span class="panel-price-type">{{ carb }} <span class="price-mode">servito</span></span>
-              <span class="panel-price-val" style="color:var(--text-secondary)">{{ fmt(p.servito) }} €/L</span>
-            </div>
+          <template v-for="carb in selectedFamilyMembers" :key="carb">
+            <template v-if="selectedImp.prezzi?.[carb]">
+              <div v-if="selectedImp.prezzi[carb].self != null" class="panel-price-row is-selected-fuel">
+                <span class="panel-price-type">{{ carb }} <span class="price-mode">self</span></span>
+                <span class="panel-price-val" :style="{ color: prezzoColore(selectedImp.prezzi[carb].self) }">{{ fmt(selectedImp.prezzi[carb].self) }} €/L</span>
+              </div>
+              <div v-if="selectedImp.prezzi[carb].servito != null" class="panel-price-row panel-price-row-sm">
+                <span class="panel-price-type">{{ carb }} <span class="price-mode">servito</span></span>
+                <span class="panel-price-val" style="color:var(--text-secondary)">{{ fmt(selectedImp.prezzi[carb].servito) }} €/L</span>
+              </div>
+            </template>
           </template>
         </div>
+        <!-- Data aggiornamento + warning se non aggiornato oggi -->
         <div class="panel-meta" v-if="selectedImp.prezzi?.[selectedFuel]?.data">
           Agg. {{ selectedImp.prezzi[selectedFuel].data }}
+          <span
+            v-if="!isPriceToday(selectedImp.prezzi[selectedFuel].data)"
+            class="price-outdated-badge"
+          >Prezzo non aggiornato</span>
         </div>
       </div>
     </Transition>
 
 
-    <!-- Stats tutti i carburanti: in fondo -->
-    <div class="stats-section" v-if="Object.keys(allStats).length">
-      <div class="stats-title">Prezzi area · self-service</div>
-      <div class="stats-grid">
-        <template v-for="(s, fuel) in allStats" :key="fuel">
-          <div v-if="s && s.self" class="stats-card">
-            <div class="stats-card-header">{{ fuel }}</div>
-            <div class="stats-row">
-              <div class="stats-item">
-                <div class="stats-val stats-min">{{ fmt(s.self.min) }}</div>
-                <div class="stats-lbl">min</div>
-              </div>
-              <div class="stats-item stats-item-mid">
-                <div class="stats-val">{{ fmt(s.self.media) }}</div>
-                <div class="stats-lbl">media</div>
-              </div>
-              <div class="stats-item">
-                <div class="stats-val stats-max">{{ fmt(s.self.max) }}</div>
-                <div class="stats-lbl">max</div>
-              </div>
-            </div>
-            <div class="stats-count">{{ s.self.count }} impianti</div>
-          </div>
-        </template>
+    <!-- Prezzi area per famiglia: in fondo -->
+    <div class="stats-section" v-if="carburanti.length && !loading">
+      <div class="stats-header">
+        <span class="stats-title">Prezzi area · self-service</span>
+        <span class="stats-badge">{{ totale }} impianti</span>
       </div>
+      <div class="stats-list">
+        <div
+          v-for="family in carburanti" :key="family"
+          class="stats-row-item"
+          :class="{ 'stats-row-active': family === selectedFuel }"
+          @click="switchFuel(family)"
+          v-if="familyStats(family)"
+        >
+          <div class="sri-name">{{ family }}</div>
+          <div class="sri-prices">
+            <span class="sri-min">{{ fmt(familyStats(family).self.min) }}</span>
+            <span class="sri-sep">–</span>
+            <span class="sri-media">{{ fmt(familyStats(family).self.media) }}</span>
+            <span class="sri-sep">–</span>
+            <span class="sri-max">{{ fmt(familyStats(family).self.max) }}</span>
+          </div>
+          <div class="sri-count">{{ familyStats(family).self.count }}</div>
+        </div>
+      </div>
+      <div class="stats-footer">Fonte: MIMIT · Osservatorio Carburanti</div>
     </div>
 
     </template><!-- /v-if="!isGuest" -->
@@ -481,12 +683,13 @@ watch(selectedId, (newId, oldId) => {
   border: 1px solid var(--border);
 }
 
-/* Selettore carburante sovrapposto: piccolo, in alto a sx */
+/* Selettore carburante sovrapposto: piccolo, in alto a sx
+   right: 52px lascia spazio ai bottoni zoom Leaflet (topright) */
 .fuel-selector-overlay {
   position: absolute;
   top: 10px;
   left: 10px;
-  right: 10px;
+  right: 52px;
   z-index: 500;
   display: flex;
   flex-wrap: nowrap;
@@ -599,73 +802,123 @@ watch(selectedId, (newId, oldId) => {
 .panel-meta { font-size: 11px; color: var(--text-secondary); }
 
 
-/* Stats in fondo */
+/* Stats in fondo — redesign per famiglia */
 .stats-section {
   margin-top: 4px;
-}
-.stats-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-  padding: 0 2px;
-}
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-.stats-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 14px;
+  border-radius: 16px;
+  overflow: hidden;
 }
-.stats-card-header {
-  font-size: 12px;
+.stats-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.stats-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+.stats-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+.stats-list {
+  display: flex;
+  flex-direction: column;
+}
+.stats-row-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.stats-row-item:last-child { border-bottom: none; }
+.stats-row-item:hover { background: var(--bg-secondary); }
+.stats-row-item.stats-row-active { background: rgba(99,102,241,0.07); }
+.sri-name {
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  min-width: 60px;
 }
-.stats-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-.stats-item {
+.stats-row-active .sri-name { color: var(--primary); }
+.sri-prices {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  justify-content: center;
 }
-.stats-item-mid {
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  padding: 0 4px;
-}
-.stats-val {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: var(--text-primary);
-}
-.stats-min { color: #16a34a; }
-.stats-max { color: #dc2626; }
-.stats-lbl {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-.stats-count {
+.sri-min { color: #16a34a; }
+.sri-max { color: #dc2626; }
+.sri-media { color: var(--text-primary); }
+.sri-sep { color: var(--text-secondary); font-size: 10px; font-weight: 400; opacity: 0.5; }
+.sri-count {
   font-size: 10px;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-top: 6px;
+  min-width: 24px;
   text-align: right;
+}
+.stats-footer {
+  font-size: 9px;
+  color: var(--text-secondary);
+  padding: 5px 14px;
+  border-top: 1px solid var(--border);
+  opacity: 0.55;
+  text-align: center;
 }
 
 /* Transizione pannello */
 .slide-up-enter-active, .slide-up-leave-active { transition: all 0.2s cubic-bezier(0.32,0.72,0,1); }
 .slide-up-enter-from, .slide-up-leave-to { opacity: 0; transform: translateY(10px); }
+
+/* Warning banner: prezzi non aggiornati (globale) */
+.warning-banner {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(234,179,8,0.10); border: 1px solid rgba(234,179,8,0.35);
+  border-radius: 12px; padding: 12px 14px;
+  font-size: 13px; color: #92400e;
+}
+.warning-banner svg { width: 18px; height: 18px; flex-shrink: 0; color: #d97706; margin-top: 1px; }
+
+/* Info banner: fonte coordinate (es. ultimo rifornimento) */
+.info-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 12px; padding: 10px 14px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.info-banner svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--primary); }
+
+/* Badge "Prezzo non aggiornato" nel dettaglio stazione */
+.price-outdated-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(234,179,8,0.15);
+  color: #92400e;
+  vertical-align: middle;
+}
 </style>

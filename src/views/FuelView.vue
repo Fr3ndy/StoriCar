@@ -25,6 +25,7 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
+
 const availableYears = computed(() => {
   const years = [...new Set(allRecords.value.map(r => new Date(r.date).getFullYear()))]
   return years.sort((a, b) => b - a)
@@ -93,22 +94,6 @@ function formatMonthShort(dateStr) {
   return new Date(dateStr).toLocaleDateString('it-IT', { month: 'short' })
 }
 
-function getConsumptionDisplay(record) {
-  const km = record.kmDriven
-  if (!km || !record.liters || km <= 0) return null
-  if (data.value.settings.consumptionUnit === 'L100km') {
-    return { value: ((record.liters / km) * 100).toFixed(1), unit: 'L/100' }
-  }
-  return { value: (km / record.liters).toFixed(1), unit: 'km/L' }
-}
-
-function consumptionClass(record) {
-  if (!record.kmDriven || !record.liters) return ''
-  const kmPerL = record.kmDriven / record.liters
-  if (kmPerL > 14) return 'cons-good'
-  if (kmPerL > 9) return 'cons-avg'
-  return 'cons-poor'
-}
 
 async function confirmDelete(record) {
   if (confirm('Sei sicuro di voler eliminare questo rifornimento?')) {
@@ -208,13 +193,6 @@ function editRecord(record) {
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
               <div class="tc-right">
                 <span v-if="record.remainingRange != null" class="tc-range" title="Autonomia registrata">⚡</span>
-                <span
-                  v-if="getConsumptionDisplay(record)"
-                  class="tc-cons"
-                  :class="consumptionClass(record)"
-                >
-                  {{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}
-                </span>
               </div>
             </div>
 
@@ -344,14 +322,6 @@ function editRecord(record) {
 
 .tc-range { font-size: 12px; opacity: 0.6; }
 
-.tc-cons {
-  font-size: 11px; font-weight: 700;
-  padding: 2px 8px; border-radius: 20px;
-  background: var(--bg-secondary); color: var(--text-secondary);
-}
-.cons-good { background: rgba(16,185,129,0.10); color: #10b981; }
-.cons-avg  { background: rgba(245,158,11,0.10); color: #f59e0b; }
-.cons-poor { background: rgba(239,68,68,0.10);  color: #ef4444; }
 
 /* Detail chips */
 .tc-chips {

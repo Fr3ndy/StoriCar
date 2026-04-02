@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useStorage } from '../composables/useStorage'
+import { useAuth } from '../composables/useAuth'
+import { supabase } from '../lib/supabase'
 
 const { data, addVehicle, updateVehicle, deleteVehicle, setDefaultVehicle, getDefaultVehicleId } = useStorage()
+const { user, isGuest } = useAuth()
 
 const vehicles = computed(() => data.value.vehicles)
 const defaultVehicleId = computed(() => getDefaultVehicleId())
@@ -17,8 +20,20 @@ const form = ref({
   model: '',
   year: '',
   fuelType: 'benzina',
-  initialOdometer: ''
+  initialOdometer: '',
+  coverImageUrl: '',       // URL immagine cover del veicolo
+  coverPosition: 'center' // Preferenza crop: center | top | bottom | percentuale
 })
+
+// Stato upload/errore cover immagine
+const coverError = ref('')
+
+// Opzioni di posizionamento immagine cover
+const coverPositionOptions = [
+  { value: 'top',    label: 'Alto' },
+  { value: 'center', label: 'Centro' },
+  { value: 'bottom', label: 'Basso' },
+]
 
 const vehicleTypes = [
   { value: 'auto', label: 'Auto' },
@@ -36,12 +51,17 @@ const fuelTypes = [
 
 function openAddForm() {
   editingVehicle.value = null
-  form.value = { name: '', vehicleType: 'auto', plate: '', brand: '', model: '', year: '', fuelType: 'benzina', initialOdometer: '' }
+  form.value = {
+    name: '', vehicleType: 'auto', plate: '', brand: '', model: '',
+    year: '', fuelType: 'benzina', initialOdometer: '',
+    coverImageUrl: '', coverPosition: 'center'
+  }
   showForm.value = true
 }
 
 function openEditForm(vehicle) {
   editingVehicle.value = vehicle.id
+  coverError.value = ''
   form.value = {
     name: vehicle.name || '',
     vehicleType: vehicle.vehicleType || 'auto',
@@ -50,7 +70,9 @@ function openEditForm(vehicle) {
     model: vehicle.model || '',
     year: vehicle.year || '',
     fuelType: vehicle.fuelType || 'benzina',
-    initialOdometer: vehicle.initialOdometer || ''
+    initialOdometer: vehicle.initialOdometer || '',
+    coverImageUrl: vehicle.coverImageUrl || '',
+    coverPosition: vehicle.coverPosition || 'center'
   }
   showForm.value = true
 }
@@ -59,7 +81,10 @@ async function saveVehicle() {
   const vehicleData = {
     ...form.value,
     initialOdometer: form.value.initialOdometer ? parseFloat(form.value.initialOdometer) : 0,
-    year: form.value.year ? parseInt(form.value.year) : null
+    year: form.value.year ? parseInt(form.value.year) : null,
+    // coverImageUrl e coverPosition già in form.value come stringhe
+    coverImageUrl: form.value.coverImageUrl?.trim() || null,
+    coverPosition: form.value.coverPosition || 'center'
   }
   if (editingVehicle.value) {
     await updateVehicle(editingVehicle.value, vehicleData)
@@ -157,6 +182,38 @@ async function setAsDefault(vehicleId) {
         <input v-model="form.initialOdometer" type="number" class="form-input" placeholder="es. 50000" min="0" />
       </div>
 
+      <!-- Cover immagine veicolo -->
+      <div class="form-group">
+        <label class="form-label">Foto copertina (URL)</label>
+        <input
+          v-model="form.coverImageUrl"
+          type="url"
+          class="form-input"
+          placeholder="https://esempio.com/foto-auto.jpg"
+        />
+        <!-- Anteprima crop con posizione controllabile -->
+        <div v-if="form.coverImageUrl" class="cover-preview">
+          <div
+            class="cover-preview-img"
+            :style="{
+              backgroundImage: `url('${form.coverImageUrl}')`,
+              backgroundPosition: form.coverPosition,
+            }"
+          ></div>
+          <div class="cover-position-row">
+            <span class="cover-position-label">Posizione foto:</span>
+            <button
+              v-for="opt in coverPositionOptions"
+              :key="opt.value"
+              type="button"
+              class="cover-pos-btn"
+              :class="{ active: form.coverPosition === opt.value }"
+              @click="form.coverPosition = opt.value"
+            >{{ opt.label }}</button>
+          </div>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-secondary" @click="showForm = false">Annulla</button>
         <button class="btn btn-primary" @click="saveVehicle" :disabled="!form.name">
@@ -176,11 +233,28 @@ async function setAsDefault(vehicleId) {
       </div>
 
       <div v-for="vehicle in vehicles" :key="vehicle.id" class="card vehicle-card">
+
+        <!-- Cover immagine veicolo (se disponibile) -->
+        <div
+          v-if="vehicle.coverImageUrl"
+          class="vehicle-cover"
+          :style="{
+            backgroundImage: `url('${vehicle.coverImageUrl}')`,
+            backgroundPosition: vehicle.coverPosition || 'center',
+          }"
+        >
+          <!-- Overlay per leggibilità targa/nome -->
+          <div class="vehicle-cover-overlay">
+            <span class="vehicle-cover-name">{{ vehicle.name }}</span>
+            <span v-if="vehicle.plate" class="vehicle-cover-plate">{{ vehicle.plate }}</span>
+          </div>
+        </div>
+
         <!-- Top row -->
         <div class="vehicle-top">
           <!-- Icon + info -->
           <div class="vehicle-left">
-            <div class="vehicle-icon">
+            <div class="vehicle-icon" :class="{ 'vehicle-icon-hidden': vehicle.coverImageUrl }">
               <svg v-if="vehicle.vehicleType === 'moto'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 0a2 2 0 100-4 2 2 0 000 4zm-7 8a7 7 0 1114 0M5 14a7 7 0 1114 0m-7-4v4m0 0l-3 3m3-3l3 3" />
               </svg>
@@ -311,6 +385,76 @@ async function setAsDefault(vehicleId) {
   padding: 14px 16px;
   margin-bottom: 12px;
   border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+/* Cover banner (top of card, negative margin to break out of padding) */
+.vehicle-cover-banner {
+  height: 90px;
+  background-size: cover;
+  background-position: center;
+  margin: -14px -16px 14px;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+}
+
+/* ── Cover upload ── */
+.cover-preview {
+  position: relative;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cover-preview-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+.cover-remove-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.cover-remove-btn svg { width: 13px; height: 13px; }
+
+.cover-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 10px;
+  border: 1.5px dashed var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cover-upload-btn:hover:not(.cover-upload-disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.cover-upload-inner {
+  display: flex; align-items: center; gap: 7px;
+}
+.cover-upload-inner svg { width: 18px; height: 18px; }
+.cover-upload-loading { opacity: 0.7; cursor: not-allowed; }
+.cover-upload-disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cover-guest-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  text-align: center;
 }
 
 .vehicle-top {
@@ -398,5 +542,99 @@ async function setAsDefault(vehicleId) {
   padding-top: 12px;
   border-top: 1px solid var(--border);
   flex-wrap: wrap;
+}
+
+/* ── Cover immagine veicolo ────────────────────────────────────────────────── */
+.vehicle-cover {
+  width: 100%;
+  height: 140px;             /* card più alta per dare spazio alla foto */
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background-size: cover;
+  background-repeat: no-repeat;
+  /* object-position controllabile via inline style */
+  position: relative;
+  overflow: hidden;
+  margin: -14px -16px 12px;  /* fuoriesce dai padding della card */
+  width: calc(100% + 32px);
+}
+
+.vehicle-cover-overlay {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 10px 14px 8px;
+  background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vehicle-cover-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.vehicle-cover-plate {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.35);
+  padding: 2px 7px;
+  border-radius: 5px;
+  backdrop-filter: blur(4px);
+}
+
+/* Nasconde l'icona veicolo se c'è già la cover */
+.vehicle-icon-hidden { display: none; }
+
+/* ── Anteprima cover nel form ──────────────────────────────────────────────── */
+.cover-preview {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.cover-preview-img {
+  width: 100%;
+  height: 120px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transition: background-position 0.2s;
+}
+
+.cover-position-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  flex-wrap: wrap;
+}
+
+.cover-position-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.cover-pos-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cover-pos-btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(37,99,235,0.08);
 }
 </style>

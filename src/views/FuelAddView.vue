@@ -42,6 +42,7 @@ const form = ref({
   pricePerLiter: '',
   odometer: '',
   remainingRange: '',
+  fullTank: false,
   notes: '',
   location: null,
   address: ''
@@ -124,6 +125,7 @@ onMounted(async () => {
         pricePerLiter: record.pricePerLiter?.toString() || '',
         odometer: record.odometer?.toString() || '',
         remainingRange: record.remainingRange?.toString() || '',
+        fullTank: record.fullTank !== false, // default true per record vecchi
         notes: record.notes || '',
         location: record.location || null,
         address: record.address || ''
@@ -227,6 +229,7 @@ async function save() {
     kmDriven: kmDrivenToSave.value,
     odometer: form.value.odometer ? parseFloat(form.value.odometer) : null,
     remainingRange: form.value.remainingRange !== '' ? parseFloat(form.value.remainingRange) : null,
+    fullTank: form.value.fullTank,
     notes: form.value.notes,
     location: form.value.location,
     address: form.value.address
@@ -430,6 +433,22 @@ const canSave = computed(() =>
           placeholder="1.659"
           @input="lockedField = 'pricePerLiter'"
         />
+      </div>
+
+      <!-- Pieno completo toggle -->
+      <div class="full-tank-toggle" @click="form.fullTank = !form.fullTank">
+        <div class="ft-icon" :class="{ 'ft-icon-full': form.fullTank }">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+          </svg>
+        </div>
+        <div class="ft-text">
+          <span class="ft-label">{{ form.fullTank ? 'Pieno completo' : 'Rifornimento parziale' }}</span>
+          <span class="ft-sub">{{ form.fullTank ? 'Serbatoio riempito al massimo' : 'Non è stato fatto il pieno' }}</span>
+        </div>
+        <div class="ft-switch" :class="{ active: form.fullTank }">
+          <div class="ft-thumb"></div>
+        </div>
       </div>
 
       <!-- Section: Altro -->
@@ -783,4 +802,48 @@ textarea.form-input {
   resize: vertical;
   min-height: 60px;
 }
+
+/* Full tank toggle */
+.full-tank-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 4px;
+  user-select: none;
+}
+.full-tank-toggle:hover { background: var(--bg-secondary); }
+.ft-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--text-secondary); transition: all 0.15s;
+}
+.ft-icon svg { width: 18px; height: 18px; }
+.ft-icon.ft-icon-full {
+  background: rgba(37,99,235,0.1);
+  border-color: rgba(37,99,235,0.25);
+  color: var(--primary);
+}
+.ft-text { flex: 1; }
+.ft-label { display: block; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.ft-sub { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+.ft-switch {
+  width: 42px; height: 24px; border-radius: 12px;
+  background: var(--border); flex-shrink: 0;
+  position: relative; transition: background 0.2s;
+}
+.ft-switch.active { background: var(--primary); }
+.ft-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform 0.2s;
+}
+.ft-switch.active .ft-thumb { transform: translateX(18px); }
 </style>

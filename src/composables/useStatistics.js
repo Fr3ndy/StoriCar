@@ -45,7 +45,10 @@ export function useStatistics(vehicleId, filters = null) {
   // Records sorted oldest-first for sequential pairing
   const sortedAscRecords = computed(() => fuelRecords.value.slice().reverse())
 
-  // Enrich each record with effectiveKm
+  // Enrich each record with effectiveKm e affidabilità consumo
+  // Metodo pieno-pieno: il consumo è affidabile solo se il rifornimento corrente
+  // è fullTank=true (o non è specificato, per retrocompatibilità).
+  // Se fullTank=false il record è considerato rifornimento parziale → stima meno affidabile.
   const recordsWithEffectiveKm = computed(() => {
     const allAsc = allFuelRecords.value.slice().reverse()
     return sortedAscRecords.value.map((record) => {
@@ -64,7 +67,22 @@ export function useStatistics(vehicleId, filters = null) {
         if (corrected > 0) effectiveKm = corrected
       }
 
-      return { ...record, effectiveKm }
+      // fullTank: true = pieno completo (consumo affidabile)
+      //           false = rifornimento parziale (stima)
+      //           undefined/null = non specificato (trattato come affidabile per retrocompatibilità)
+      const isFullTank = record.fullTank !== false // true se true o non impostato
+      const isReliableConsumption = isFullTank && effectiveKm > 0 && (record.liters ?? 0) > 0
+
+      // Calcolo consumo puntuale del record (km/L o L/100 gestiti a livello vista)
+      const pointConsumptionKmL = effectiveKm > 0 && (record.liters ?? 0) > 0
+        ? effectiveKm / record.liters
+        : null
+
+      // Warning diagnostico per valori anomali (< 2 km/L o > 50 km/L per benzina/diesel)
+      const isAnomalous = pointConsumptionKmL != null &&
+        (pointConsumptionKmL < 2 || pointConsumptionKmL > 50)
+
+      return { ...record, effectiveKm, isFullTank, isReliableConsumption, pointConsumptionKmL, isAnomalous }
     })
   })
 
@@ -81,21 +99,46 @@ export function useStatistics(vehicleId, filters = null) {
     recordsWithEffectiveKm.value.reduce((sum, r) => sum + (r.effectiveKm || 0), 0)
   )
 
+  // ── Consumo medio: metodo pieno-pieno (affidabile) ────────────────────────
+  // Usa solo i record con isReliableConsumption=true per il valore "ufficiale".
+  // Se non ci sono record affidabili, cade su tutti i record con km > 0.
+  const reliableRecords = computed(() =>
+    recordsWithEffectiveKm.value.filter(r => r.isReliableConsumption)
+  )
+
+  const totalKmReliable = computed(() =>
+    reliableRecords.value.reduce((s, r) => s + r.effectiveKm, 0)
+  )
+  const totalLitersReliable = computed(() =>
+    reliableRecords.value.reduce((s, r) => s + (r.liters || 0), 0)
+  )
+
+  // true = consumo basato su dati pieno-pieno; false = stima su tutti i dati
+  const consumptionIsReliable = computed(() =>
+    totalKmReliable.value > 0 && totalLitersReliable.value > 0
+  )
+
   const averageConsumption = computed(() => {
+    if (consumptionIsReliable.value) {
+      return totalKmReliable.value / totalLitersReliable.value
+    }
+    // Fallback su tutti i km/litri se non ci sono pieni completi
     if (totalKmDriven.value === 0 || totalLiters.value === 0) return 0
     return totalKmDriven.value / totalLiters.value
   })
 
   const averageConsumptionPer100km = computed(() => {
-    if (totalKmDriven.value === 0 || totalLiters.value === 0) return 0
-    return (totalLiters.value / totalKmDriven.value) * 100
+    const kmL = averageConsumption.value
+    if (!kmL) return 0
+    return 100 / kmL
   })
 
   const formattedConsumption = computed(() => {
+    const isReliable = consumptionIsReliable.value
     if (consumptionUnit.value === 'L100km') {
-      return { value: averageConsumptionPer100km.value, unit: 'L/100km' }
+      return { value: averageConsumptionPer100km.value, unit: 'L/100km', reliable: isReliable }
     }
-    return { value: averageConsumption.value, unit: 'km/L' }
+    return { value: averageConsumption.value, unit: 'km/L', reliable: isReliable }
   })
 
   const averagePricePerLiter = computed(() => {
@@ -196,16 +239,60 @@ export function useStatistics(vehicleId, filters = null) {
     fuelRecords.value.slice().reverse().map(r => ({ date: r.date, price: r.pricePerLiter }))
   )
 
-  const consumptionHistory = computed(() =>
-    recordsWithEffectiveKm.value
-      .filter(r => r.effectiveKm && r.liters)
-      .map(r => ({
-        date: r.date,
-        consumption: consumptionUnit.value === 'L100km'
-          ? (r.liters / r.effectiveKm) * 100
-          : r.effectiveKm / r.liters
-      }))
-  )
+  // Mappa stima consumo: km_N / liters_{N-1} (per ogni rifornimento con un precedente)
+  const estimateConsMap = computed(() => {
+    const asc = allFuelRecords.value.slice().reverse()
+    const map = {}
+    for (let i = 1; i < asc.length; i++) {
+      const curr = asc[i]
+      const prev = asc[i - 1]
+      const km = (curr.odometer ?? 0) - (prev.odometer ?? 0)
+      const liters = prev.liters ?? 0
+      if (km > 0 && liters > 0) map[curr.id] = { km, liters, kmPerL: km / liters }
+    }
+    return map
+  })
+
+  // Mappa precisa fill-to-fill: solo tra due pieni completi
+  const accurateConsMap = computed(() => {
+    const asc = allFuelRecords.value.slice().reverse()
+    const map = {}
+    let prevFullIdx = -1
+    for (let i = 0; i < asc.length; i++) {
+      const r = asc[i]
+      const isFull = r.fullTank !== false
+      if (isFull && prevFullIdx >= 0) {
+        const prevFull = asc[prevFullIdx]
+        const km = (r.odometer ?? 0) - (prevFull.odometer ?? 0)
+        if (km > 0) {
+          let totalLiters = 0
+          for (let j = prevFullIdx + 1; j <= i; j++) totalLiters += asc[j].liters ?? 0
+          if (totalLiters > 0) map[r.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
+        }
+      }
+      if (isFull) prevFullIdx = i
+    }
+    return map
+  })
+
+  // Storico consumo: usa il preciso (fill-to-fill) se disponibile, altrimenti la stima
+  const consumptionHistory = computed(() => {
+    const asc = allFuelRecords.value.slice().reverse()
+    return asc
+      .filter(r => accurateConsMap.value[r.id] || estimateConsMap.value[r.id])
+      .map(r => {
+        const acc = accurateConsMap.value[r.id]
+        const est = estimateConsMap.value[r.id]
+        const c = acc || est
+        return {
+          date: r.date,
+          consumption: consumptionUnit.value === 'L100km'
+            ? (c.liters / c.km) * 100
+            : c.kmPerL,
+          isEstimate: !acc
+        }
+      })
+  })
 
   const monthlySpending = computed(() => {
     const monthly = {}
@@ -304,21 +391,26 @@ export function useStatistics(vehicleId, filters = null) {
   })
 
   // ── Lista rifornimenti con consumo calcolato ──
+  // computedConsumption = preciso fill-to-fill (solo tra pieni)
+  // estimatedConsumption = stima km_N / liters_{N-1} (sempre quando c'è un precedente)
   const detailedFuelList = computed(() => {
     return recordsWithEffectiveKm.value
       .slice()
       .reverse()
-      .map(r => ({
-        ...r,
-        computedConsumption: r.effectiveKm && r.liters
-          ? consumptionUnit.value === 'L100km'
-            ? (r.liters / r.effectiveKm) * 100
-            : r.effectiveKm / r.liters
-          : null,
-        costPerKm: r.effectiveKm && r.amount
-          ? r.amount / r.effectiveKm
-          : null
-      }))
+      .map(r => {
+        const acc = r.fullTank !== false ? accurateConsMap.value[r.id] : null
+        const est = estimateConsMap.value[r.id]
+        return {
+          ...r,
+          computedConsumption: acc
+            ? consumptionUnit.value === 'L100km' ? (acc.liters / acc.km) * 100 : acc.kmPerL
+            : null,
+          estimatedConsumption: est
+            ? consumptionUnit.value === 'L100km' ? (est.liters / est.km) * 100 : est.kmPerL
+            : null,
+          costPerKm: r.effectiveKm && r.amount ? r.amount / r.effectiveKm : null
+        }
+      })
   })
 
   // ── Efficienza nel tempo: migliorata o peggiorata ──
@@ -400,6 +492,7 @@ export function useStatistics(vehicleId, filters = null) {
     averageConsumption,
     averageConsumptionPer100km,
     formattedConsumption,
+    consumptionIsReliable,   // true = basato su pieni completi
     averagePricePerLiter,
     costPerKm,
     averageFuelSpentPerMonth,
