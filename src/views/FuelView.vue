@@ -362,4 +362,16 @@ function editRecord(record) {
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 12px; 
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.tc-action-btn svg { width: 13px; height: 13px; }
+.tc-action-btn:active { opacity: .8; }
+.tc-action-btn.danger {
+  color: var(--danger);
+  background: rgba(239,68,68,0.06);
+  border-color: rgba(239,68,68,0.2);
+  padding: 5px 8px;
+}
+.tc-action-btn.danger:active { background: rgba(239,68,68,0.12); }
+</style>
