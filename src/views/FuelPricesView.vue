@@ -198,7 +198,8 @@ const selectedFamilyMembers = computed(() =>
 )
 
 // ── Warning prezzi non aggiornati ─────────────────────────────────────────────
-const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
+// Data odierna in ora locale (non UTC) → evita sfasamenti dopo mezzanotte
+const todayStr = new Date().toLocaleDateString('sv-SE') // 'YYYY-MM-DD' in locale
 
 /**
  * Restituisce true se la data del prezzo (stringa DD/MM/YYYY o ISO) è oggi.
@@ -206,13 +207,14 @@ const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
  */
 function isPriceToday(dateStr) {
   if (!dateStr) return false
-  // Supporta sia DD/MM/YYYY che YYYY-MM-DD
   let isoDate = dateStr
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+  // Formato DD/MM/YYYY → YYYY-MM-DD
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(dateStr)) {
     const [d, m, y] = dateStr.split('/')
     isoDate = `${y}-${m}-${d}`
   }
-  return isoDate === todayStr
+  // Prende solo i primi 10 caratteri (YYYY-MM-DD) ignorando ore/fuso
+  return isoDate.slice(0, 10) === todayStr
 }
 
 /**
