@@ -32,12 +32,12 @@ function getRadius() {
 
 // ── Validazione coordinate ─────────────────────────────────────────────────────
 function isValidCoord(lat, lng) {
-  return (
-    lat != null && lng != null &&
-    !isNaN(lat) && !isNaN(lng) &&
-    lat >= -90 && lat <= 90 &&
-    lng >= -180 && lng <= 180
-  )
+  // Rifiuta null, undefined, NaN, e la coppia (0,0) che indica coordinate non impostate
+  if (lat == null || lng == null) return false
+  const n_lat = Number(lat), n_lng = Number(lng)
+  if (isNaN(n_lat) || isNaN(n_lng)) return false
+  if (n_lat === 0 && n_lng === 0) return false // (0,0) = non impostato
+  return n_lat >= -90 && n_lat <= 90 && n_lng >= -180 && n_lng <= 180
 }
 
 // ── Mappa ─────────────────────────────────────────────────────────────────────
@@ -168,12 +168,34 @@ onMounted(async () => {
 
 onUnmounted(() => { if (map) { map.remove(); map = null } })
 
+// ── Famiglie carburanti (chip → nomi API MIMIT equivalenti) ───────────────────
+const FUEL_FAMILIES = {
+  'Benzina': ['Benzina', 'Blue Super', 'HiQ Perform+'],
+  'Gasolio': ['Gasolio', 'Blue Diesel', 'HVOlution', 'HVO', 'Gasolio Premium', 'Supreme Diesel', 'Hi-Q Diesel'],
+  'Metano':  ['Metano'],
+  'GPL':     ['GPL'],
+  'L-GNC':   ['L-GNC'],
+  'GNL':     ['GNL'],
+}
+
 // ── Computed ──────────────────────────────────────────────────────────────────
 const impianti   = computed(() => data.value?.impianti ?? [])
 const allStats   = computed(() => data.value?.stats ?? {})
 const aggiornato = computed(() => data.value?.aggiornato ?? null)
 const totale     = computed(() => data.value?.totale ?? 0)
-const carburanti = computed(() => data.value?.carburanti ?? ['Benzina', 'Gasolio'])
+
+// Chip visibili: solo famiglie per cui l'API ha restituito almeno un membro
+const carburanti = computed(() => {
+  const apiList = data.value?.carburanti ?? ['Benzina', 'Gasolio']
+  return Object.keys(FUEL_FAMILIES).filter(family =>
+    FUEL_FAMILIES[family].some(f => apiList.includes(f))
+  )
+})
+
+// Membri della famiglia del carburante selezionato
+const selectedFamilyMembers = computed(() =>
+  FUEL_FAMILIES[selectedFuel.value] ?? [selectedFuel.value]
+)
 
 // ── Warning prezzi non aggiornati ─────────────────────────────────────────────
 const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'

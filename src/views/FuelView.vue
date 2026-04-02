@@ -161,6 +161,15 @@ function getConsumptionDisplay(record) {
   return { value: kmPerL.toFixed(1), unit: 'km/L', isEstimate, isAnomalous }
 }
 
+// Converte un oggetto {km, liters, kmPerL} in stringa leggibile secondo l'unità scelta
+function formatConsumption(entry) {
+  if (!entry) return null
+  if (data.value.settings.consumptionUnit === 'L100km') {
+    return ((entry.liters / entry.km) * 100).toFixed(1) + ' L/100'
+  }
+  return entry.kmPerL.toFixed(1) + ' km/L'
+}
+
 function getEstimateDisplay(record) {
   return formatConsumption(estimateMap.value[record.id])
 }
@@ -170,6 +179,16 @@ function getAccurateDisplay(record) {
   return formatConsumption(accurateMap.value[record.id])
 }
 
+// consumptionClass: usata nel template per colorare la pillola consumo
+function consumptionClass(record) {
+  if (!record.kmDriven || !record.liters) return ''
+  const kmPerL = record.kmDriven / record.liters
+  if (kmPerL > 14) return 'cons-good'
+  if (kmPerL > 9) return 'cons-avg'
+  return 'cons-poor'
+}
+
+// consumptionColor: usata per colorare in base a un valore kmPerL diretto
 function consumptionColor(kmPerL) {
   if (!kmPerL) return ''
   if (kmPerL > 14) return 'cons-good'

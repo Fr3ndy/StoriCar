@@ -25,6 +25,9 @@ const form = ref({
   coverPosition: 'center' // Preferenza crop: center | top | bottom | percentuale
 })
 
+// Stato upload/errore cover immagine
+const coverError = ref('')
+
 // Opzioni di posizionamento immagine cover
 const coverPositionOptions = [
   { value: 'top',    label: 'Alto' },

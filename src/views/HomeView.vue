@@ -13,10 +13,11 @@ const { data, dataReady, getDefaultVehicleId, setDefaultVehicle, getDeadlinesByV
 const fuelPricesData = ref(null)
 
 function isValidCoordHome(lat, lng) {
-  return lat != null && lng != null &&
-    !isNaN(Number(lat)) && !isNaN(Number(lng)) &&
-    Number(lat) >= -90 && Number(lat) <= 90 &&
-    Number(lng) >= -180 && Number(lng) <= 180
+  if (lat == null || lng == null) return false
+  const n_lat = Number(lat), n_lng = Number(lng)
+  if (isNaN(n_lat) || isNaN(n_lng)) return false
+  if (n_lat === 0 && n_lng === 0) return false // (0,0) = non impostato
+  return n_lat >= -90 && n_lat <= 90 && n_lng >= -180 && n_lng <= 180
 }
 
 async function loadFuelWidget() {

@@ -10,15 +10,14 @@ const lastFetch = ref(null)
 // Raggio massimo consentito (spec Storicar)
 const MAX_RADIUS_KM = 100
 
-/** Verifica che lat/lng siano numeri nei range geografici validi */
+/** Verifica che lat/lng siano numeri nei range geografici validi.
+ *  Rifiuta (0,0) che indica coordinate non impostate (null → Number = 0). */
 function isValidCoord(lat, lng) {
-  return (
-    lat != null && lng != null &&
-    typeof lat === 'number' && typeof lng === 'number' &&
-    !isNaN(lat) && !isNaN(lng) &&
-    lat >= -90 && lat <= 90 &&
-    lng >= -180 && lng <= 180
-  )
+  if (lat == null || lng == null) return false
+  const n_lat = Number(lat), n_lng = Number(lng)
+  if (isNaN(n_lat) || isNaN(n_lng)) return false
+  if (n_lat === 0 && n_lng === 0) return false
+  return n_lat >= -90 && n_lat <= 90 && n_lng >= -180 && n_lng <= 180
 }
 
 export function useFuelPrices() {
