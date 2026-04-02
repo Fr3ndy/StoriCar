@@ -9,6 +9,27 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/).
 
 ---
 
+## [1.3.0] — 2026-03-22 🗺️ Prezzi carburante & fix consumo
+
+### Aggiunto
+- Immagine di copertina del veicolo come sfondo sfocato nella card hero di HomeView
+- Layout desktop: colonna centrata a 600px con sfondo scuro laterale e box-shadow
+- Icona impostazioni nella topbar (sostituisce il toggle tema)
+- Banner beta spostato sopra la navbar inferiore
+- Scrollbar sottile (4px) sul contenuto principale, diventa blu al hover
+
+### Migliorato
+- Mappa prezzi carburante: zoom in alto a destra (non si sovrappone più ai chip)
+- Nomi carburanti aggiornati ai nomi esatti API MIMIT (Benzina, Gasolio, Metano, GPL, L-GNC, GNL + varianti premium brand-specific)
+- Chip mappa raggruppati in 6 famiglie: le varianti premium (Blue Super, Blue Diesel, HVOlution, HVO, Gasolio Premium, Supreme Diesel, Hi-Q Diesel, HiQ Perform+) appaiono nel pannello dettaglio ma non come chip separate
+- Sezione "Prezzi area" completamente ridisegnata: lista per famiglia con min/media/max e numero impianti, cliccabile per cambiare carburante sulla mappa
+
+### Corretto
+- Calcolo consumo con metodo fill-to-fill: il consumo (km/L) è calcolato solo tra due rifornimenti a "pieno completo", sommando i litri di tutti i parziali intermedi — i valori anomali (es. 25,9 km/L) sono eliminati
+- Aggiunto toggle "Pieno completo" nel form di aggiunta rifornimento (default: parziale); i rifornimenti parziali mostrano un badge "parziale" al posto del consumo
+
+---
+
 ## [1.2.0] — 2026-03-19 ✨ Profilo pubblico & modalità ospite
 
 ### Aggiunto

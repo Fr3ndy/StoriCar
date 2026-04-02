@@ -25,6 +25,55 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
+// Calcolo stima consumo: km dall'ultimo rifornimento / litri dell'ultimo rifornimento.
+// I litri messi al rifornimento N vengono usati per calcolare il consumo al rifornimento N+1.
+// Mostrato per ogni rifornimento che ha un precedente con odometro e litri validi.
+const estimateMap = computed(() => {
+  const asc = data.value.fuelRecords
+    .filter(r => r.vehicleId === selectedVehicleId.value)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const map = {}
+  for (let i = 1; i < asc.length; i++) {
+    const curr = asc[i]
+    const prev = asc[i - 1]
+    const km = (curr.odometer ?? 0) - (prev.odometer ?? 0)
+    const liters = prev.liters ?? 0
+    if (km > 0 && liters > 0) {
+      map[curr.id] = { km, liters, kmPerL: km / liters }
+    }
+  }
+  return map
+})
+
+// Calcolo preciso fill-to-fill: solo tra due pieni completi (fullTank !== false).
+// km = odo_N - odo_{prevFull}; litri = somma di tutti i litri da prevFull+1 a N incluso.
+const accurateMap = computed(() => {
+  const asc = data.value.fuelRecords
+    .filter(r => r.vehicleId === selectedVehicleId.value)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const map = {}
+  let prevFullIdx = -1
+
+  for (let i = 0; i < asc.length; i++) {
+    const curr = asc[i]
+    const isFull = curr.fullTank !== false
+
+    if (isFull && prevFullIdx >= 0) {
+      const prevFull = asc[prevFullIdx]
+      const km = (curr.odometer ?? 0) - (prevFull.odometer ?? 0)
+      if (km > 0) {
+        let totalLiters = 0
+        for (let j = prevFullIdx + 1; j <= i; j++) totalLiters += asc[j].liters ?? 0
+        if (totalLiters > 0) map[curr.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
+      }
+    }
+
+    if (isFull) prevFullIdx = i
+  }
+
+  return map
+})
+
 const availableYears = computed(() => {
   const years = [...new Set(allRecords.value.map(r => new Date(r.date).getFullYear()))]
   return years.sort((a, b) => b - a)
@@ -112,9 +161,17 @@ function getConsumptionDisplay(record) {
   return { value: kmPerL.toFixed(1), unit: 'km/L', isEstimate, isAnomalous }
 }
 
-function consumptionClass(record) {
-  if (!record.kmDriven || !record.liters) return ''
-  const kmPerL = record.kmDriven / record.liters
+function getEstimateDisplay(record) {
+  return formatConsumption(estimateMap.value[record.id])
+}
+
+function getAccurateDisplay(record) {
+  if (record.fullTank === false) return null
+  return formatConsumption(accurateMap.value[record.id])
+}
+
+function consumptionColor(kmPerL) {
+  if (!kmPerL) return ''
   if (kmPerL > 14) return 'cons-good'
   if (kmPerL > 9) return 'cons-avg'
   return 'cons-poor'
@@ -367,11 +424,19 @@ function editRecord(record) {
 
 .tc-range { font-size: 12px; opacity: 0.6; }
 
+.tc-cons-wrap {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+}
+
 .tc-cons {
   font-size: 11px; font-weight: 700;
   padding: 2px 8px; border-radius: 20px;
   background: var(--bg-secondary); color: var(--text-secondary);
+  white-space: nowrap;
 }
+.tc-est { opacity: 0.65; }
+.tc-acc { opacity: 1; }
+
 .cons-good { background: rgba(16,185,129,0.10); color: #10b981; }
 .cons-avg  { background: rgba(245,158,11,0.10); color: #f59e0b; }
 .cons-poor { background: rgba(239,68,68,0.10);  color: #ef4444; }

@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useStorage } from '../composables/useStorage'
+import { useAuth } from '../composables/useAuth'
+import { supabase } from '../lib/supabase'
 
 const { data, addVehicle, updateVehicle, deleteVehicle, setDefaultVehicle, getDefaultVehicleId } = useStorage()
+const { user, isGuest } = useAuth()
 
 const vehicles = computed(() => data.value.vehicles)
 const defaultVehicleId = computed(() => getDefaultVehicleId())
@@ -55,6 +58,7 @@ function openAddForm() {
 
 function openEditForm(vehicle) {
   editingVehicle.value = vehicle.id
+  coverError.value = ''
   form.value = {
     name: vehicle.name || '',
     vehicleType: vehicle.vehicleType || 'auto',
@@ -378,6 +382,76 @@ async function setAsDefault(vehicleId) {
   padding: 14px 16px;
   margin-bottom: 12px;
   border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+/* Cover banner (top of card, negative margin to break out of padding) */
+.vehicle-cover-banner {
+  height: 90px;
+  background-size: cover;
+  background-position: center;
+  margin: -14px -16px 14px;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+}
+
+/* ── Cover upload ── */
+.cover-preview {
+  position: relative;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cover-preview-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+.cover-remove-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.cover-remove-btn svg { width: 13px; height: 13px; }
+
+.cover-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 10px;
+  border: 1.5px dashed var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cover-upload-btn:hover:not(.cover-upload-disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.cover-upload-inner {
+  display: flex; align-items: center; gap: 7px;
+}
+.cover-upload-inner svg { width: 18px; height: 18px; }
+.cover-upload-loading { opacity: 0.7; cursor: not-allowed; }
+.cover-upload-disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cover-guest-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  text-align: center;
 }
 
 .vehicle-top {

@@ -75,6 +75,35 @@ $FUEL_NAMES = [
     // Premium Q8
     'Hi-Q Diesel', 'HiQ Perform+',
 ];
+// Carburanti da includere — nomi esatti come restituiti dall'API MIMIT
+// Standard
+// ├─ Benzina        (fuelId 1)
+// ├─ Gasolio        (fuelId 2)
+// ├─ Metano         (fuelId 3)
+// ├─ GPL            (fuelId 4)
+// ├─ L-GNC          (fuelId 323)
+// └─ GNL            (fuelId 324)
+// Premium ENI/Agip
+// ├─ Blue Super     (fuelId 5)
+// ├─ Blue Diesel    (fuelId 20)
+// ├─ HVOlution      (fuelId 394)
+// └─ HVO            (fuelId 404/408/430 — stesso nome, fuelId variabile per brand)
+// Premium Esso
+// ├─ Gasolio Premium (fuelId 10)
+// └─ Supreme Diesel  (fuelId 327)
+// Premium Q8
+// ├─ Hi-Q Diesel    (fuelId 6)
+// └─ HiQ Perform+   (fuelId 28)
+$FUEL_NAMES = [
+    // Standard MIMIT
+    'Benzina', 'Gasolio', 'Metano', 'GPL', 'L-GNC', 'GNL',
+    // Premium ENI/Agip
+    'Blue Super', 'Blue Diesel', 'HVOlution', 'HVO',
+    // Premium Esso
+    'Gasolio Premium', 'Supreme Diesel',
+    // Premium Q8
+    'Hi-Q Diesel', 'HiQ Perform+',
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
