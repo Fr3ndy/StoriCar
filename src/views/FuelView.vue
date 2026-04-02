@@ -25,54 +25,6 @@ const allRecords = computed(() => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
-// Calcolo stima consumo: km dall'ultimo rifornimento / litri dell'ultimo rifornimento.
-// I litri messi al rifornimento N vengono usati per calcolare il consumo al rifornimento N+1.
-// Mostrato per ogni rifornimento che ha un precedente con odometro e litri validi.
-const estimateMap = computed(() => {
-  const asc = data.value.fuelRecords
-    .filter(r => r.vehicleId === selectedVehicleId.value)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-  const map = {}
-  for (let i = 1; i < asc.length; i++) {
-    const curr = asc[i]
-    const prev = asc[i - 1]
-    const km = (curr.odometer ?? 0) - (prev.odometer ?? 0)
-    const liters = prev.liters ?? 0
-    if (km > 0 && liters > 0) {
-      map[curr.id] = { km, liters, kmPerL: km / liters }
-    }
-  }
-  return map
-})
-
-// Calcolo preciso fill-to-fill: solo tra due pieni completi (fullTank !== false).
-// km = odo_N - odo_{prevFull}; litri = somma di tutti i litri da prevFull+1 a N incluso.
-const accurateMap = computed(() => {
-  const asc = data.value.fuelRecords
-    .filter(r => r.vehicleId === selectedVehicleId.value)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-  const map = {}
-  let prevFullIdx = -1
-
-  for (let i = 0; i < asc.length; i++) {
-    const curr = asc[i]
-    const isFull = curr.fullTank !== false
-
-    if (isFull && prevFullIdx >= 0) {
-      const prevFull = asc[prevFullIdx]
-      const km = (curr.odometer ?? 0) - (prevFull.odometer ?? 0)
-      if (km > 0) {
-        let totalLiters = 0
-        for (let j = prevFullIdx + 1; j <= i; j++) totalLiters += asc[j].liters ?? 0
-        if (totalLiters > 0) map[curr.id] = { km, liters: totalLiters, kmPerL: km / totalLiters }
-      }
-    }
-
-    if (isFull) prevFullIdx = i
-  }
-
-  return map
-})
 
 const availableYears = computed(() => {
   const years = [...new Set(allRecords.value.map(r => new Date(r.date).getFullYear()))]
@@ -142,59 +94,6 @@ function formatMonthShort(dateStr) {
   return new Date(dateStr).toLocaleDateString('it-IT', { month: 'short' })
 }
 
-function getConsumptionDisplay(record) {
-  const km = record.kmDriven
-  // Richiede km > 0 e litri > 0 (non usare valori nulli o zero)
-  if (!km || !record.liters || km <= 0 || record.liters <= 0) return null
-
-  const kmPerL = km / record.liters
-  // Warning diagnostico per valori anomali
-  const isAnomalous = kmPerL < 2 || kmPerL > 50
-
-  // fullTank=false → rifornimento parziale, consumo è una stima
-  const isEstimate = record.fullTank === false
-
-  if (data.value.settings.consumptionUnit === 'L100km') {
-    const val = ((record.liters / km) * 100).toFixed(1)
-    return { value: val, unit: 'L/100', isEstimate, isAnomalous }
-  }
-  return { value: kmPerL.toFixed(1), unit: 'km/L', isEstimate, isAnomalous }
-}
-
-// Converte un oggetto {km, liters, kmPerL} in stringa leggibile secondo l'unità scelta
-function formatConsumption(entry) {
-  if (!entry) return null
-  if (data.value.settings.consumptionUnit === 'L100km') {
-    return ((entry.liters / entry.km) * 100).toFixed(1) + ' L/100'
-  }
-  return entry.kmPerL.toFixed(1) + ' km/L'
-}
-
-function getEstimateDisplay(record) {
-  return formatConsumption(estimateMap.value[record.id])
-}
-
-function getAccurateDisplay(record) {
-  if (record.fullTank === false) return null
-  return formatConsumption(accurateMap.value[record.id])
-}
-
-// consumptionClass: usata nel template per colorare la pillola consumo
-function consumptionClass(record) {
-  if (!record.kmDriven || !record.liters) return ''
-  const kmPerL = record.kmDriven / record.liters
-  if (kmPerL > 14) return 'cons-good'
-  if (kmPerL > 9) return 'cons-avg'
-  return 'cons-poor'
-}
-
-// consumptionColor: usata per colorare in base a un valore kmPerL diretto
-function consumptionColor(kmPerL) {
-  if (!kmPerL) return ''
-  if (kmPerL > 14) return 'cons-good'
-  if (kmPerL > 9) return 'cons-avg'
-  return 'cons-poor'
-}
 
 async function confirmDelete(record) {
   if (confirm('Sei sicuro di voler eliminare questo rifornimento?')) {
@@ -294,26 +193,6 @@ function editRecord(record) {
               <span class="tc-amount">{{ formatNumber(record.amount) }} €</span>
               <div class="tc-right">
                 <span v-if="record.remainingRange != null" class="tc-range" title="Autonomia registrata">⚡</span>
-                <template v-if="getConsumptionDisplay(record)">
-                  <!-- Warning: valore anomalo (< 2 o > 50 km/L) -->
-                  <span
-                    v-if="getConsumptionDisplay(record).isAnomalous"
-                    class="tc-cons cons-anomaly"
-                    title="Valore anomalo: verifica km percorsi e litri"
-                  >⚠ {{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}</span>
-                  <!-- Valore normale -->
-                  <span
-                    v-else
-                    class="tc-cons"
-                    :class="consumptionClass(record)"
-                  >{{ getConsumptionDisplay(record).value }} {{ getConsumptionDisplay(record).unit }}</span>
-                  <!-- Badge stima: rifornimento parziale -->
-                  <span
-                    v-if="getConsumptionDisplay(record).isEstimate"
-                    class="tc-cons-estimate"
-                    title="Rifornimento parziale: consumo stimato, non affidabile come media"
-                  >stima</span>
-                </template>
               </div>
             </div>
 
@@ -443,31 +322,6 @@ function editRecord(record) {
 
 .tc-range { font-size: 12px; opacity: 0.6; }
 
-.tc-cons-wrap {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
-}
-
-.tc-cons {
-  font-size: 11px; font-weight: 700;
-  padding: 2px 8px; border-radius: 20px;
-  background: var(--bg-secondary); color: var(--text-secondary);
-  white-space: nowrap;
-}
-.tc-est { opacity: 0.65; }
-.tc-acc { opacity: 1; }
-
-.cons-good { background: rgba(16,185,129,0.10); color: #10b981; }
-.cons-avg  { background: rgba(245,158,11,0.10); color: #f59e0b; }
-.cons-poor { background: rgba(239,68,68,0.10);  color: #ef4444; }
-/* Valore anomalo (fuori range plausibile) */
-.cons-anomaly { background: rgba(239,68,68,0.10); color: #ef4444; }
-/* Badge rifornimento parziale / stima */
-.tc-cons-estimate {
-  font-size: 10px; font-weight: 700;
-  padding: 2px 6px; border-radius: 20px;
-  background: rgba(245,158,11,0.12); color: #b45309;
-  border: 1px solid rgba(245,158,11,0.3);
-}
 
 /* Detail chips */
 .tc-chips {
@@ -508,16 +362,4 @@ function editRecord(record) {
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-}
-.tc-action-btn svg { width: 13px; height: 13px; }
-.tc-action-btn:active { opacity: .8; }
-.tc-action-btn.danger {
-  color: var(--danger);
-  background: rgba(239,68,68,0.06);
-  border-color: rgba(239,68,68,0.2);
-  padding: 5px 8px;
-}
-.tc-action-btn.danger:active { background: rgba(239,68,68,0.12); }
-</style>
+  font-size: 12px; 
