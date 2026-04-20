@@ -73,7 +73,14 @@ function mapVehicle(r) {
     id: r.id, name: r.name, vehicleType: r.vehicle_type, plate: r.plate,
     brand: r.brand, model: r.model, year: r.year, fuelType: r.fuel_type,
     initialOdometer: r.initial_odometer,
-    coverImageUrl: r.cover_image_url ?? null
+    coverImageUrl: r.cover_image_url ?? null,
+    coverPosition: r.cover_position ?? 'center',
+    // Dettagli aggiuntivi
+    oilType: r.oil_type ?? null,
+    serviceIntervalKm: r.service_interval_km ?? null,
+    serviceIntervalMonths: r.service_interval_months ?? null,
+    tireSize: r.tire_size ?? null,
+    notes: r.notes ?? null
   }
 }
 function mapFuelRecord(r) {
@@ -358,14 +365,44 @@ export function useStorage() {
   async function addVehicle(vehicle) {
     if (isGuest.value) {
       const id     = localId()
-      const mapped = { ...vehicle, id, initialOdometer: vehicle.initialOdometer || 0 }
+      const mapped = {
+        ...vehicle,
+        id,
+        initialOdometer: vehicle.initialOdometer || 0,
+        coverPosition: vehicle.coverPosition || 'center'
+      }
       data.value.vehicles.push(mapped)
       if (data.value.vehicles.length === 1) data.value.settings.defaultVehicleId = id
       saveLocalData()
-      return id
+      return mapped
     }
-    const { data: row, error } = await supabase.from('vehicles')
-      .insert({
+    // Costruisce payload tollerante a colonne mancanti nel DB
+    const insertPayload = {
+      user_id:          user.value.id,
+      name:             vehicle.name,
+      vehicle_type:     vehicle.vehicleType,
+      plate:            vehicle.plate,
+      brand:            vehicle.brand,
+      model:            vehicle.model,
+      year:             vehicle.year,
+      fuel_type:        vehicle.fuelType,
+      initial_odometer: vehicle.initialOdometer || 0,
+      cover_image_url:  vehicle.coverImageUrl   ?? null
+    }
+    // Campi opzionali (potrebbero non esistere nello schema → fallback)
+    if (vehicle.coverPosition !== undefined)         insertPayload.cover_position          = vehicle.coverPosition
+    if (vehicle.oilType !== undefined)               insertPayload.oil_type                = vehicle.oilType ?? null
+    if (vehicle.serviceIntervalKm !== undefined)     insertPayload.service_interval_km     = vehicle.serviceIntervalKm ?? null
+    if (vehicle.serviceIntervalMonths !== undefined) insertPayload.service_interval_months = vehicle.serviceIntervalMonths ?? null
+    if (vehicle.tireSize !== undefined)              insertPayload.tire_size               = vehicle.tireSize ?? null
+    if (vehicle.notes !== undefined)                 insertPayload.notes                   = vehicle.notes ?? null
+
+    let row, error
+    ;({ data: row, error } = await supabase.from('vehicles').insert(insertPayload).select().single())
+
+    // Fallback: se il DB ancora non ha le nuove colonne, ripiega su payload base
+    if (error && /column .* does not exist/i.test(error.message || '')) {
+      const basicPayload = {
         user_id:          user.value.id,
         name:             vehicle.name,
         vehicle_type:     vehicle.vehicleType,
@@ -376,16 +413,27 @@ export function useStorage() {
         fuel_type:        vehicle.fuelType,
         initial_odometer: vehicle.initialOdometer || 0,
         cover_image_url:  vehicle.coverImageUrl   ?? null
-      })
-      .select().single()
+      }
+      ;({ data: row, error } = await supabase.from('vehicles').insert(basicPayload).select().single())
+    }
     if (error) throw error
-    const mapped = mapVehicle(row)
+
+    // Merge dei campi locali (anche se il DB non li salva ancora)
+    const mapped = {
+      ...mapVehicle(row),
+      coverPosition: vehicle.coverPosition ?? mapVehicle(row).coverPosition,
+      oilType: vehicle.oilType ?? mapVehicle(row).oilType,
+      serviceIntervalKm: vehicle.serviceIntervalKm ?? mapVehicle(row).serviceIntervalKm,
+      serviceIntervalMonths: vehicle.serviceIntervalMonths ?? mapVehicle(row).serviceIntervalMonths,
+      tireSize: vehicle.tireSize ?? mapVehicle(row).tireSize,
+      notes: vehicle.notes ?? mapVehicle(row).notes
+    }
     data.value.vehicles.push(mapped)
     if (data.value.vehicles.length === 1) {
       data.value.settings.defaultVehicleId = mapped.id
       await persistSettings(data.value.settings)
     }
-    return mapped.id
+    return mapped
   }
 
   async function updateVehicle(id, updates) {
@@ -396,17 +444,33 @@ export function useStorage() {
       return
     }
     const db = {}
-    if ('name'            in updates) db.name             = updates.name
-    if ('vehicleType'     in updates) db.vehicle_type     = updates.vehicleType
-    if ('plate'           in updates) db.plate            = updates.plate
-    if ('brand'           in updates) db.brand            = updates.brand
-    if ('model'           in updates) db.model            = updates.model
-    if ('year'            in updates) db.year             = updates.year
-    if ('fuelType'        in updates) db.fuel_type        = updates.fuelType
-    if ('initialOdometer' in updates) db.initial_odometer = updates.initialOdometer
-    if ('coverImageUrl'   in updates) db.cover_image_url  = updates.coverImageUrl ?? null
-    const { error } = await supabase.from('vehicles').update(db).eq('id', id)
+    if ('name'                  in updates) db.name                    = updates.name
+    if ('vehicleType'           in updates) db.vehicle_type            = updates.vehicleType
+    if ('plate'                 in updates) db.plate                   = updates.plate
+    if ('brand'                 in updates) db.brand                   = updates.brand
+    if ('model'                 in updates) db.model                   = updates.model
+    if ('year'                  in updates) db.year                    = updates.year
+    if ('fuelType'              in updates) db.fuel_type               = updates.fuelType
+    if ('initialOdometer'       in updates) db.initial_odometer        = updates.initialOdometer
+    if ('coverImageUrl'         in updates) db.cover_image_url         = updates.coverImageUrl ?? null
+    if ('coverPosition'         in updates) db.cover_position          = updates.coverPosition ?? 'center'
+    if ('oilType'               in updates) db.oil_type                = updates.oilType ?? null
+    if ('serviceIntervalKm'     in updates) db.service_interval_km     = updates.serviceIntervalKm ?? null
+    if ('serviceIntervalMonths' in updates) db.service_interval_months = updates.serviceIntervalMonths ?? null
+    if ('tireSize'              in updates) db.tire_size               = updates.tireSize ?? null
+    if ('notes'                 in updates) db.notes                   = updates.notes ?? null
+
+    let { error } = await supabase.from('vehicles').update(db).eq('id', id)
+
+    // Fallback: se alcune colonne non esistono ancora, riprova solo coi campi noti
+    if (error && /column .* does not exist/i.test(error.message || '')) {
+      const safeKeys = ['name','vehicle_type','plate','brand','model','year','fuel_type','initial_odometer','cover_image_url']
+      const safeDb = {}
+      for (const k of safeKeys) if (k in db) safeDb[k] = db[k]
+      ;({ error } = await supabase.from('vehicles').update(safeDb).eq('id', id))
+    }
     if (error) throw error
+
     const i = data.value.vehicles.findIndex(v => v.id === id)
     if (i !== -1) data.value.vehicles[i] = { ...data.value.vehicles[i], ...updates }
   }
@@ -754,7 +818,9 @@ export function useStorage() {
       await clearAllData()
       const vehicleIdMap = {}
       for (const v of (imported.vehicles || [])) {
-        const newId = await addVehicle(v)
+        const created = await addVehicle(v)
+        // addVehicle ora ritorna l'oggetto veicolo (oppure l'id come fallback)
+        const newId = (created && typeof created === 'object') ? created.id : created
         vehicleIdMap[v.id] = newId
       }
       for (const r of (imported.fuelRecords || []))

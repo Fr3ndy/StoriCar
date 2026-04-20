@@ -294,6 +294,42 @@ function dlLabel(dl) {
         </div>
       </div>
 
+      <!-- Dettagli veicolo (olio, gomme, tagliando, note) -->
+      <div
+        v-if="stats.vehicle.value && (stats.vehicle.value.oilType || stats.vehicle.value.tireSize || stats.vehicle.value.serviceIntervalKm || stats.vehicle.value.serviceIntervalMonths || stats.vehicle.value.notes)"
+        class="section"
+      >
+        <div class="section-header">
+          <span class="section-title">Dettagli veicolo</span>
+          <button class="section-link" @click="router.push('/vehicles')">Modifica</button>
+        </div>
+        <div class="card details-card">
+          <div v-if="stats.vehicle.value.oilType" class="detail-row">
+            <span class="detail-row-icon">🛢️</span>
+            <span class="detail-row-label">Olio motore</span>
+            <strong class="detail-row-value">{{ stats.vehicle.value.oilType }}</strong>
+          </div>
+          <div v-if="stats.vehicle.value.tireSize" class="detail-row">
+            <span class="detail-row-icon">⚙️</span>
+            <span class="detail-row-label">Pneumatici</span>
+            <strong class="detail-row-value">{{ stats.vehicle.value.tireSize }}</strong>
+          </div>
+          <div v-if="stats.vehicle.value.serviceIntervalKm || stats.vehicle.value.serviceIntervalMonths" class="detail-row">
+            <span class="detail-row-icon">🔧</span>
+            <span class="detail-row-label">Tagliando ogni</span>
+            <strong class="detail-row-value">
+              <template v-if="stats.vehicle.value.serviceIntervalKm">{{ stats.vehicle.value.serviceIntervalKm.toLocaleString('it-IT') }} km</template>
+              <template v-if="stats.vehicle.value.serviceIntervalKm && stats.vehicle.value.serviceIntervalMonths"> · </template>
+              <template v-if="stats.vehicle.value.serviceIntervalMonths">{{ stats.vehicle.value.serviceIntervalMonths }} mesi</template>
+            </strong>
+          </div>
+          <div v-if="stats.vehicle.value.notes" class="detail-notes">
+            <span class="detail-row-icon">📝</span>
+            <span>{{ stats.vehicle.value.notes }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Scadenze imminenti -->
       <div v-if="upcomingDeadlines.length > 0" class="section">
         <div class="section-header">
@@ -598,4 +634,32 @@ function dlLabel(dl) {
 }
 .prices-val span { font-size: 10px; color: var(--text-tertiary); font-weight: 600; margin-left: 2px; }
 .prices-media { font-size: 10px; color: var(--text-secondary); margin-top: 3px; }
+
+/* ── Dettagli veicolo (Home) ─────────────────────────────────────────────── */
+.details-card {
+  padding: 4px 0;
+}
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.detail-row:last-child { border-bottom: none; }
+.detail-row-icon { font-size: 16px; line-height: 1; flex-shrink: 0; }
+.detail-row-label { flex: 1; color: var(--text-secondary); }
+.detail-row-value { color: var(--text-primary); font-weight: 700; }
+.detail-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
 </style>

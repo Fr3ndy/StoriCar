@@ -4,7 +4,11 @@ import { useStorage } from '../composables/useStorage'
 import { useAuth } from '../composables/useAuth'
 import { supabase } from '../lib/supabase'
 
-const { data, addVehicle, updateVehicle, deleteVehicle, setDefaultVehicle, getDefaultVehicleId } = useStorage()
+const {
+  data,
+  addVehicle, updateVehicle, deleteVehicle, setDefaultVehicle, getDefaultVehicleId,
+  addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle
+} = useStorage()
 const { user, isGuest } = useAuth()
 
 const vehicles = computed(() => data.value.vehicles)
@@ -22,11 +26,25 @@ const form = ref({
   fuelType: 'benzina',
   initialOdometer: '',
   coverImageUrl: '',       // URL immagine cover del veicolo
-  coverPosition: 'center' // Preferenza crop: center | top | bottom | percentuale
+  coverPosition: 'center', // Preferenza crop: center | top | bottom
+  // Dettagli aggiuntivi
+  oilType: '',             // es. 5W-30
+  serviceIntervalKm: '',   // intervallo tagliando in km
+  serviceIntervalMonths: '', // intervallo tagliando in mesi
+  tireSize: '',            // es. 205/55 R16
+  notes: '',               // note libere
+  // Scadenze (sincronizzate con la sezione Scadenze)
+  bolloDate: '',
+  bolloAmount: '',
+  insuranceDate: '',
+  insuranceAmount: '',
+  serviceDate: '',
+  serviceAmount: ''
 })
 
 // Stato upload/errore cover immagine
 const coverError = ref('')
+const coverLoading = ref(false)
 
 // Opzioni di posizionamento immagine cover
 const coverPositionOptions = [
@@ -49,12 +67,74 @@ const fuelTypes = [
   { value: 'ibrido', label: 'Ibrido' }
 ]
 
+// ── Upload immagine veicolo (Supabase Storage) ───────────────────────────────
+async function uploadCoverImage(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  event.target.value = ''
+
+  if (file.size > 5 * 1024 * 1024) {
+    coverError.value = 'Immagine troppo grande (max 5 MB)'
+    return
+  }
+
+  // Per gli ospiti usa data URL locale (no Supabase)
+  if (isGuest.value || !user.value) {
+    try {
+      const reader = new FileReader()
+      reader.onload = (e) => { form.value.coverImageUrl = e.target.result }
+      reader.onerror = () => { coverError.value = 'Errore lettura file' }
+      reader.readAsDataURL(file)
+    } catch (e) {
+      coverError.value = 'Errore lettura file'
+    }
+    return
+  }
+
+  coverLoading.value = true
+  coverError.value = ''
+  try {
+    const ext  = file.name.split('.').pop() || 'jpg'
+    const path = `${user.value.id}/cover_${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('vehicle-covers')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (upErr) throw upErr
+    const { data: urlData } = supabase.storage.from('vehicle-covers').getPublicUrl(path)
+    form.value.coverImageUrl = urlData.publicUrl + '?t=' + Date.now()
+  } catch (e) {
+    coverError.value = 'Errore durante il caricamento. Riprova.'
+    console.error('[cover upload]', e)
+  } finally {
+    coverLoading.value = false
+  }
+}
+
+function removeCoverImage() {
+  form.value.coverImageUrl = ''
+  coverError.value = ''
+}
+
+// ── Helper scadenze: prende quella esistente per tipo ───────────────────────
+function getDeadlineByType(vehicleId, type) {
+  if (!vehicleId) return null
+  return (data.value.deadlines || []).find(
+    d => d.vehicleId === vehicleId && d.type === type
+  )
+}
+
 function openAddForm() {
   editingVehicle.value = null
+  coverError.value = ''
   form.value = {
     name: '', vehicleType: 'auto', plate: '', brand: '', model: '',
     year: '', fuelType: 'benzina', initialOdometer: '',
-    coverImageUrl: '', coverPosition: 'center'
+    coverImageUrl: '', coverPosition: 'center',
+    oilType: '', serviceIntervalKm: '', serviceIntervalMonths: '',
+    tireSize: '', notes: '',
+    bolloDate: '', bolloAmount: '',
+    insuranceDate: '', insuranceAmount: '',
+    serviceDate: '', serviceAmount: ''
   }
   showForm.value = true
 }
@@ -62,6 +142,10 @@ function openAddForm() {
 function openEditForm(vehicle) {
   editingVehicle.value = vehicle.id
   coverError.value = ''
+  // Pre-carica le scadenze esistenti per sincronizzazione
+  const bollo = getDeadlineByType(vehicle.id, 'bollo')
+  const assic = getDeadlineByType(vehicle.id, 'assicurazione')
+  const tagl  = getDeadlineByType(vehicle.id, 'tagliando')
   form.value = {
     name: vehicle.name || '',
     vehicleType: vehicle.vehicleType || 'auto',
@@ -72,25 +156,81 @@ function openEditForm(vehicle) {
     fuelType: vehicle.fuelType || 'benzina',
     initialOdometer: vehicle.initialOdometer || '',
     coverImageUrl: vehicle.coverImageUrl || '',
-    coverPosition: vehicle.coverPosition || 'center'
+    coverPosition: vehicle.coverPosition || 'center',
+    oilType: vehicle.oilType || '',
+    serviceIntervalKm: vehicle.serviceIntervalKm || '',
+    serviceIntervalMonths: vehicle.serviceIntervalMonths || '',
+    tireSize: vehicle.tireSize || '',
+    notes: vehicle.notes || '',
+    bolloDate: bollo?.expiryDate || '',
+    bolloAmount: bollo?.amount ?? '',
+    insuranceDate: assic?.expiryDate || '',
+    insuranceAmount: assic?.amount ?? '',
+    serviceDate: tagl?.expiryDate || '',
+    serviceAmount: tagl?.amount ?? ''
   }
   showForm.value = true
 }
 
+// Salva o aggiorna una scadenza in modo idempotente per (vehicleId, type)
+async function syncDeadline(vehicleId, type, label, expiryDate, amount) {
+  const existing = getDeadlineByType(vehicleId, type)
+  const dateClean = (expiryDate || '').trim()
+  // Se la data è vuota: cancella la scadenza esistente (se esiste)
+  if (!dateClean) {
+    if (existing) await deleteDeadline(existing.id)
+    return
+  }
+  const payload = {
+    vehicleId,
+    type,
+    description: label,
+    expiryDate: dateClean,
+    amount: amount !== '' && amount != null ? parseFloat(amount) : null,
+    reminderDays: existing?.reminderDays ?? 30,
+    notes: existing?.notes || ''
+  }
+  if (existing) {
+    await updateDeadline(existing.id, payload)
+  } else {
+    await addDeadline(payload)
+  }
+}
+
 async function saveVehicle() {
   const vehicleData = {
-    ...form.value,
+    name: form.value.name,
+    vehicleType: form.value.vehicleType,
+    plate: form.value.plate,
+    brand: form.value.brand,
+    model: form.value.model,
     initialOdometer: form.value.initialOdometer ? parseFloat(form.value.initialOdometer) : 0,
     year: form.value.year ? parseInt(form.value.year) : null,
-    // coverImageUrl e coverPosition già in form.value come stringhe
+    fuelType: form.value.fuelType,
     coverImageUrl: form.value.coverImageUrl?.trim() || null,
-    coverPosition: form.value.coverPosition || 'center'
+    coverPosition: form.value.coverPosition || 'center',
+    oilType: form.value.oilType?.trim() || null,
+    serviceIntervalKm: form.value.serviceIntervalKm ? parseInt(form.value.serviceIntervalKm) : null,
+    serviceIntervalMonths: form.value.serviceIntervalMonths ? parseInt(form.value.serviceIntervalMonths) : null,
+    tireSize: form.value.tireSize?.trim() || null,
+    notes: form.value.notes?.trim() || null
   }
+  let vehicleId
   if (editingVehicle.value) {
     await updateVehicle(editingVehicle.value, vehicleData)
+    vehicleId = editingVehicle.value
   } else {
-    await addVehicle(vehicleData)
+    const created = await addVehicle(vehicleData)
+    vehicleId = created?.id || data.value.vehicles[data.value.vehicles.length - 1]?.id
   }
+
+  // Sincronizza le 3 scadenze (crea/aggiorna/elimina)
+  if (vehicleId) {
+    await syncDeadline(vehicleId, 'bollo',         'Bollo',         form.value.bolloDate,     form.value.bolloAmount)
+    await syncDeadline(vehicleId, 'assicurazione', 'Assicurazione', form.value.insuranceDate, form.value.insuranceAmount)
+    await syncDeadline(vehicleId, 'tagliando',     'Tagliando',     form.value.serviceDate,   form.value.serviceAmount)
+  }
+
   showForm.value = false
 }
 
@@ -102,6 +242,20 @@ async function confirmDelete(vehicle) {
 
 async function setAsDefault(vehicleId) {
   await setDefaultVehicle(vehicleId)
+}
+
+// ── Helpers per mostrare scadenze nelle card ────────────────────────────────
+function vehicleDeadlines(vehicleId) {
+  return {
+    bollo:         getDeadlineByType(vehicleId, 'bollo'),
+    assicurazione: getDeadlineByType(vehicleId, 'assicurazione'),
+    tagliando:     getDeadlineByType(vehicleId, 'tagliando')
+  }
+}
+
+function formatDate(d) {
+  if (!d) return ''
+  try { return new Date(d).toLocaleDateString('it-IT') } catch { return d }
 }
 </script>
 
@@ -184,14 +338,9 @@ async function setAsDefault(vehicleId) {
 
       <!-- Cover immagine veicolo -->
       <div class="form-group">
-        <label class="form-label">Foto copertina (URL)</label>
-        <input
-          v-model="form.coverImageUrl"
-          type="url"
-          class="form-input"
-          placeholder="https://esempio.com/foto-auto.jpg"
-        />
-        <!-- Anteprima crop con posizione controllabile -->
+        <label class="form-label">Foto copertina</label>
+
+        <!-- Anteprima + posizione (se presente) -->
         <div v-if="form.coverImageUrl" class="cover-preview">
           <div
             class="cover-preview-img"
@@ -200,6 +349,12 @@ async function setAsDefault(vehicleId) {
               backgroundPosition: form.coverPosition,
             }"
           ></div>
+          <button type="button" class="cover-remove-btn" @click="removeCoverImage">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            Rimuovi
+          </button>
           <div class="cover-position-row">
             <span class="cover-position-label">Posizione foto:</span>
             <button
@@ -211,6 +366,113 @@ async function setAsDefault(vehicleId) {
               @click="form.coverPosition = opt.value"
             >{{ opt.label }}</button>
           </div>
+        </div>
+
+        <!-- Pulsante carica/sostituisci dal dispositivo -->
+        <label class="cover-upload-btn" :class="{ 'cover-upload-loading': coverLoading }">
+          <input
+            type="file"
+            accept="image/*"
+            style="display:none"
+            :disabled="coverLoading"
+            @change="uploadCoverImage"
+          />
+          <span v-if="coverLoading" class="cover-upload-inner">
+            <span class="spinner-xs"></span>
+            Caricamento…
+          </span>
+          <span v-else class="cover-upload-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            {{ form.coverImageUrl ? 'Cambia foto dal dispositivo' : 'Carica foto dal dispositivo' }}
+          </span>
+        </label>
+
+        <!-- Oppure input URL come alternativa -->
+        <input
+          v-model="form.coverImageUrl"
+          type="url"
+          class="form-input cover-url-input"
+          placeholder="…oppure incolla un URL https://…"
+        />
+
+        <p v-if="coverError" class="field-error">{{ coverError }}</p>
+      </div>
+
+      <!-- ── Dettagli aggiuntivi ──────────────────────────────────────────── -->
+      <div class="section-divider">
+        <span>Dettagli aggiuntivi</span>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tipo / viscosità olio</label>
+          <input v-model="form.oilType" type="text" class="form-input" placeholder="es. 5W-30" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Misura pneumatici</label>
+          <input v-model="form.tireSize" type="text" class="form-input" placeholder="es. 205/55 R16" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tagliando ogni (km)</label>
+          <input v-model="form.serviceIntervalKm" type="number" class="form-input" placeholder="es. 15000" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tagliando ogni (mesi)</label>
+          <input v-model="form.serviceIntervalMonths" type="number" class="form-input" placeholder="es. 12" min="0" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea
+          v-model="form.notes"
+          class="form-input form-textarea"
+          rows="2"
+          placeholder="Cinghia distribuzione, batteria, accessori, ecc."
+        ></textarea>
+      </div>
+
+      <!-- ── Scadenze (sincronizzate con la sezione Scadenze) ─────────────── -->
+      <div class="section-divider">
+        <span>Scadenze</span>
+        <small>Si sincronizzano con la sezione Scadenze</small>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">📄 Bollo — scadenza</label>
+          <input v-model="form.bolloDate" type="date" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo (€)</label>
+          <input v-model="form.bolloAmount" type="number" class="form-input" placeholder="es. 180" min="0" step="0.01" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">🛡️ Assicurazione — scadenza</label>
+          <input v-model="form.insuranceDate" type="date" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo (€)</label>
+          <input v-model="form.insuranceAmount" type="number" class="form-input" placeholder="es. 450" min="0" step="0.01" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">🔧 Tagliando — prossimo</label>
+          <input v-model="form.serviceDate" type="date" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo (€)</label>
+          <input v-model="form.serviceAmount" type="number" class="form-input" placeholder="es. 250" min="0" step="0.01" />
         </div>
       </div>
 
@@ -288,6 +550,57 @@ async function setAsDefault(vehicleId) {
         <!-- Odometer info -->
         <div v-if="vehicle.initialOdometer" class="vehicle-odo">
           Km iniziali: <strong>{{ vehicle.initialOdometer.toLocaleString('it-IT') }}</strong>
+        </div>
+
+        <!-- Dettagli aggiuntivi -->
+        <div
+          v-if="vehicle.oilType || vehicle.tireSize || vehicle.serviceIntervalKm || vehicle.serviceIntervalMonths"
+          class="vehicle-details"
+        >
+          <div v-if="vehicle.oilType" class="detail-chip">
+            <span class="detail-icon">🛢️</span>
+            <span class="detail-label">Olio</span>
+            <span class="detail-value">{{ vehicle.oilType }}</span>
+          </div>
+          <div v-if="vehicle.tireSize" class="detail-chip">
+            <span class="detail-icon">⚙️</span>
+            <span class="detail-label">Gomme</span>
+            <span class="detail-value">{{ vehicle.tireSize }}</span>
+          </div>
+          <div v-if="vehicle.serviceIntervalKm || vehicle.serviceIntervalMonths" class="detail-chip">
+            <span class="detail-icon">🔧</span>
+            <span class="detail-label">Tagliando</span>
+            <span class="detail-value">
+              <template v-if="vehicle.serviceIntervalKm">{{ vehicle.serviceIntervalKm.toLocaleString('it-IT') }} km</template>
+              <template v-if="vehicle.serviceIntervalKm && vehicle.serviceIntervalMonths"> · </template>
+              <template v-if="vehicle.serviceIntervalMonths">{{ vehicle.serviceIntervalMonths }} mesi</template>
+            </span>
+          </div>
+        </div>
+
+        <!-- Note -->
+        <div v-if="vehicle.notes" class="vehicle-notes">{{ vehicle.notes }}</div>
+
+        <!-- Scadenze sintetiche -->
+        <div
+          v-if="vehicleDeadlines(vehicle.id).bollo || vehicleDeadlines(vehicle.id).assicurazione || vehicleDeadlines(vehicle.id).tagliando"
+          class="vehicle-deadlines"
+        >
+          <div v-if="vehicleDeadlines(vehicle.id).bollo" class="dl-mini">
+            <span class="dl-mini-icon">📄</span>
+            <span class="dl-mini-label">Bollo</span>
+            <span class="dl-mini-date">{{ formatDate(vehicleDeadlines(vehicle.id).bollo.expiryDate) }}</span>
+          </div>
+          <div v-if="vehicleDeadlines(vehicle.id).assicurazione" class="dl-mini">
+            <span class="dl-mini-icon">🛡️</span>
+            <span class="dl-mini-label">Assicurazione</span>
+            <span class="dl-mini-date">{{ formatDate(vehicleDeadlines(vehicle.id).assicurazione.expiryDate) }}</span>
+          </div>
+          <div v-if="vehicleDeadlines(vehicle.id).tagliando" class="dl-mini">
+            <span class="dl-mini-icon">🔧</span>
+            <span class="dl-mini-label">Tagliando</span>
+            <span class="dl-mini-date">{{ formatDate(vehicleDeadlines(vehicle.id).tagliando.expiryDate) }}</span>
+          </div>
         </div>
 
         <!-- Actions -->
@@ -636,5 +949,158 @@ async function setAsDefault(vehicleId) {
   border-color: var(--primary);
   color: var(--primary);
   background: rgba(37,99,235,0.08);
+}
+
+/* ── Form: textarea, sezioni, errori ──────────────────────────────────────── */
+.form-textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.section-divider {
+  margin: 22px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.section-divider span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-divider small {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.cover-url-input {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+/* Spinner mini per upload */
+.spinner-xs {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0,0,0,0.15);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Pulsante rimuovi cover (sopra preview) */
+.cover-remove-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+.cover-remove-btn svg { width: 13px; height: 13px; }
+
+.cover-preview { position: relative; }
+
+/* ── Dettagli aggiuntivi nelle card ───────────────────────────────────────── */
+.vehicle-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.detail-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.detail-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vehicle-notes {
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-style: italic;
+}
+
+/* ── Scadenze mini nelle card ─────────────────────────────────────────────── */
+.vehicle-deadlines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(37,99,235,0.05);
+  border-radius: 8px;
+  border-left: 3px solid var(--primary);
+}
+
+.dl-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.dl-mini-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.dl-mini-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.dl-mini-date {
+  font-weight: 700;
+  color: var(--text-primary);
 }
 </style>
