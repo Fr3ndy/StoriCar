@@ -24,8 +24,10 @@ const defaultSettings = {
   avatarUrl: null,
   isPublic: false,
   notificationsEnabled: false,
-  customCategories: [],   // { value, label } array di categorie personalizzate
-  customActionTypes: [],  // { value, label, icon } tipi azione personalizzati
+  customCategories: [],   // legacy
+  customActionTypes: [],  // legacy
+  allExpenseCategories: [], // lista completa categorie spese (gestibile)
+  allActionTypes: [],        // lista completa tipi azione (gestibile)
 }
 
 const emptyData = () => ({

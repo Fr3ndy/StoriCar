@@ -31,6 +31,11 @@ const actionTypes = {
 }
 
 function getActionType(value) {
+  const managed = data.value.settings?.allActionTypes || []
+  if (managed.length) {
+    const m = managed.find(t => t.value === value)
+    if (m) return { label: m.label, icon: m.icon || '📋' }
+  }
   return actionTypes[value] || { label: value, icon: '📋' }
 }
 

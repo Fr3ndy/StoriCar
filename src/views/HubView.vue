@@ -28,6 +28,12 @@ const builtinCategories = {
   other:       { label: 'Altro',         color: '#64748b' }
 }
 function getCategoryInfo(v) {
+  // Prefer allExpenseCategories (managed list), fallback to builtinCategories
+  const managed = data.value.settings?.allExpenseCategories || []
+  if (managed.length) {
+    const m = managed.find(x => x.value === v)
+    if (m) return { label: m.label, color: builtinCategories[v]?.color || '#64748b' }
+  }
   if (builtinCategories[v]) return builtinCategories[v]
   const c = (data.value.settings?.customCategories || []).find(x => x.value === v)
   return c || builtinCategories.other
@@ -48,6 +54,11 @@ const builtinActionTypes = {
   altro:            { label: 'Altro',              icon: '📋' },
 }
 function getActionType(v) {
+  const managed = data.value.settings?.allActionTypes || []
+  if (managed.length) {
+    const m = managed.find(x => x.value === v)
+    if (m) return { label: m.label, icon: m.icon || '📋' }
+  }
   if (builtinActionTypes[v]) return builtinActionTypes[v]
   const c = (data.value.settings?.customActionTypes || []).find(x => x.value === v)
   return c ? { label: c.label, icon: c.icon || '📋' } : { label: v, icon: '📋' }

@@ -25,6 +25,11 @@ const builtinCategories = {
 }
 
 function getCategoryInfo(categoryValue) {
+  const managed = data.value.settings?.allExpenseCategories || []
+  if (managed.length) {
+    const m = managed.find(c => c.value === categoryValue)
+    if (m) return { label: m.label, color: builtinCategories[categoryValue]?.color || '#64748b' }
+  }
   if (builtinCategories[categoryValue]) return builtinCategories[categoryValue]
   const custom = (data.value.settings?.customCategories || []).find(c => c.value === categoryValue)
   return custom || builtinCategories.other

@@ -194,38 +194,9 @@ function toggleTheme() {
 }
 
 // ── Categorie personalizzate ─────────────────────────────────
-const newCatLabel = ref('')
-const newActionLabel = ref('')
 
-async function addCustomActionType() {
-  const label = newActionLabel.value.trim()
-  if (!label) return
-  const value = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-  const current = data.value.settings.customActionTypes || []
-  await setSetting('customActionTypes', [...current, { value, label, icon: '📋' }])
-  newActionLabel.value = ''
-}
 
-async function removeCustomActionType(index) {
-  const current = [...(data.value.settings.customActionTypes || [])]
-  current.splice(index, 1)
-  await setSetting('customActionTypes', current)
-}
 
-async function addCustomCategory() {
-  const label = newCatLabel.value.trim()
-  if (!label) return
-  const value = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-  const current = data.value.settings.customCategories || []
-  await setSetting('customCategories', [...current, { value, label }])
-  newCatLabel.value = ''
-}
-
-async function removeCustomCategory(index) {
-  const current = [...(data.value.settings.customCategories || [])]
-  current.splice(index, 1)
-  await setSetting('customCategories', current)
-}
 
 function downloadData() {
   saveToFile()
@@ -405,7 +376,7 @@ async function resetData() {
     </div> -->
 
     <!-- ── Riepilogo dati ── -->
-    <div class="data-summary">
+    <!-- <div class="data-summary">
       <div class="summary-item">
         <div class="summary-val">{{ totalVehicles }}</div>
         <div class="summary-lbl">Veicoli</div>
@@ -422,7 +393,7 @@ async function resetData() {
         <div class="summary-val">{{ totalDeadlines }}</div>
         <div class="summary-lbl">Scadenze</div>
       </div>
-    </div>
+    </div> -->
 
     <!-- ── Aspetto ── -->
     <div class="settings-group">
@@ -627,45 +598,6 @@ async function resetData() {
             min="1" max="50"
           />
           <span class="notify-unit">km</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Categorie personalizzate ── -->
-    <div class="settings-group">
-      <div class="group-title">Categorie spese</div>
-
-      <div class="custom-cats">
-        <div
-          v-for="(cat, i) in (data.settings?.customCategories || [])"
-          :key="i"
-          class="custom-cat-row"
-        >
-          <span class="custom-cat-label">{{ cat.label }}</span>
-          <button class="btn btn-sm btn-secondary" style="padding:4px 8px" @click="removeCustomCategory(i)">✕</button>
-        </div>
-        <div class="new-cat-row">
-          <input v-model="newCatLabel" type="text" class="form-input" placeholder="Nuova categoria…" style="flex:1" @keyup.enter="addCustomCategory" />
-          <button class="btn btn-sm btn-primary" :disabled="!newCatLabel.trim()" @click="addCustomCategory">Aggiungi</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Tipi azione personalizzati ── -->
-    <div class="settings-group">
-      <div class="group-title">Tipi azione</div>
-      <div class="custom-cats">
-        <div
-          v-for="(t, i) in (data.settings?.customActionTypes || [])"
-          :key="i"
-          class="custom-cat-row"
-        >
-          <span class="custom-cat-label">📋 {{ t.label }}</span>
-          <button class="btn btn-sm btn-secondary" style="padding:4px 8px" @click="removeCustomActionType(i)">✕</button>
-        </div>
-        <div class="new-cat-row">
-          <input v-model="newActionLabel" type="text" class="form-input" placeholder="Nuovo tipo azione…" style="flex:1" @keyup.enter="addCustomActionType" />
-          <button class="btn btn-sm btn-primary" :disabled="!newActionLabel.trim()" @click="addCustomActionType">Aggiungi</button>
         </div>
       </div>
     </div>
@@ -1157,14 +1089,6 @@ async function resetData() {
   border-bottom: 1px solid var(--border);
 }
 
-/* Custom categories */
-.custom-cats { padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 6px; }
-.custom-cat-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 0; border-bottom: 1px solid var(--border);
-}
-.custom-cat-label { font-size: 14px; font-weight: 500; color: var(--text-primary); }
-.new-cat-row { display: flex; gap: 8px; margin-top: 6px; }
 
 .danger-group {
   border-color: rgba(239,68,68,0.3);
