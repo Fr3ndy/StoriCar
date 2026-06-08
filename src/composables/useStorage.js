@@ -84,8 +84,16 @@ function mapVehicle(r) {
   }
 }
 function mapFuelRecord(r) {
+  // date può essere 'YYYY-MM-DD' oppure 'YYYY-MM-DDTHH:MM' (time incorporato)
+  let date = r.date ?? ''
+  let time = null
+  if (date.includes('T')) {
+    const [d, t] = date.split('T')
+    date = d
+    time = t.slice(0, 5) // HH:MM
+  }
   return {
-    id: r.id, vehicleId: r.vehicle_id, date: r.date, time: r.time ?? null,
+    id: r.id, vehicleId: r.vehicle_id, date, time,
     amount: r.amount,
     liters: r.liters, pricePerLiter: r.price_per_liter, kmDriven: r.km_driven,
     odometer: r.odometer, remainingRange: r.remaining_range,
@@ -458,8 +466,7 @@ export function useStorage() {
       .insert({
         user_id:         user.value.id,
         vehicle_id:      record.vehicleId,
-        date:            record.date,
-        time:            record.time ?? null,
+        date:            record.time ? `${record.date}T${record.time}` : record.date,
         amount:          record.amount,
         liters:          record.liters,
         price_per_liter: record.pricePerLiter,
@@ -487,8 +494,11 @@ export function useStorage() {
       return
     }
     const db = {}
-    if ('date'           in updates) db.date            = updates.date
-    if ('time'           in updates) db.time            = updates.time ?? null
+    if ('date' in updates || 'time' in updates) {
+      const d = updates.date ?? data.value.fuelRecords.find(r => r.id === id)?.date ?? ''
+      const t = updates.time ?? data.value.fuelRecords.find(r => r.id === id)?.time ?? null
+      db.date = t ? `${d}T${t}` : d
+    }
     if ('amount'         in updates) db.amount          = updates.amount
     if ('liters'         in updates) db.liters          = updates.liters
     if ('pricePerLiter'  in updates) db.price_per_liter = updates.pricePerLiter

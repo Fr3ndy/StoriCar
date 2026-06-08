@@ -59,13 +59,13 @@ const pageTitle = computed(() => ({
   home: 'Storicar', vehicles: 'Veicoli', fuel: 'Rifornimenti',
   'fuel-add': 'Nuovo Rifornimento', 'fuel-edit': 'Modifica Rifornimento',
   expenses: 'Spese', 'expenses-add': 'Nuova Spesa', 'expenses-edit': 'Modifica Spesa',
-  deadlines: 'Scadenze', stats: 'Statistiche', map: 'Mappa',
+  stats: 'Statistiche', map: 'Mappa',
   'fuel-prices': 'Prezzi', settings: 'Impostazioni',
   actions: 'Azioni', 'action-add': 'Nuova Azione', 'action-edit': 'Modifica Azione',
   hub: 'Attività', 'fuel-prices': 'Prezzi Carburante'
 }[route.name] || 'Storicar'))
 
-const moreRoutes  = ['vehicles', 'stats', 'map', 'settings', 'deadlines']
+const moreRoutes  = ['vehicles', 'stats', 'map', 'settings']
 const isMoreActive = computed(() => moreRoutes.includes(route.name))
 
 // Hide shell on login
@@ -181,7 +181,7 @@ onMounted(() => {
         <span>Carburante</span>
       </router-link>
 
-      <router-link to="/hub" class="nav-item" :class="{ active: route.name === 'hub' || route.name?.startsWith('expenses') || route.name?.startsWith('action') || route.name === 'deadlines' }">
+      <router-link to="/hub" class="nav-item" :class="{ active: route.name === 'hub' || route.name?.startsWith('expenses') || route.name?.startsWith('action') }">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
         </svg>

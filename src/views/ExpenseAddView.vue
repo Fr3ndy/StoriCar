@@ -209,7 +209,7 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
 .cat-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .manage-link { background: none; border: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
 
-/* Chip grid – stessa struttura di DeadlinesView */
+/* Chip grid */
 .type-grid {
   display: flex;
   flex-wrap: wrap;

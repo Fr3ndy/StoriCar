@@ -14,7 +14,7 @@ const routes = [
   { path: '/expenses', name: 'expenses', component: () => import('./views/ExpensesView.vue') },
   { path: '/expenses/add', name: 'expenses-add', component: () => import('./views/ExpenseAddView.vue') },
   { path: '/expenses/edit/:id', name: 'expenses-edit', component: () => import('./views/ExpenseAddView.vue') },
-  { path: '/deadlines', name: 'deadlines', component: () => import('./views/DeadlinesView.vue') },
+
   { path: '/stats', name: 'stats', component: () => import('./views/StatsView.vue') },
   { path: '/map', name: 'map', component: () => import('./views/MapView.vue') },
   { path: '/fuel-prices', name: 'fuel-prices', component: () => import('./views/FuelPricesView.vue') },

@@ -7,7 +7,8 @@ const router = useRouter()
 const {
   data, selectedVehicleId,
   deleteExpense, deleteAction,
-  addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle
+  addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle,
+  getSetting, setSetting
 } = useStorage()
 
 const activeTab = ref('spese') // spese | azioni | scadenze | timeline
@@ -17,22 +18,25 @@ const hasVehicles = computed(() => vehicles.value.length > 0)
 
 // ── Categorie spese ───────────────────────────────────────────
 const builtinCategories = {
-  maintenance: { label: 'Manutenzione', color: '#f59e0b' },
-  insurance:   { label: 'Assicurazione', color: '#6366f1' },
-  tax:         { label: 'Bollo',         color: '#ef4444' },
-  tires:       { label: 'Gomme',         color: '#f97316' },
-  wash:        { label: 'Lavaggio',      color: '#06b6d4' },
-  parking:     { label: 'Parcheggio',    color: '#8b5cf6' },
-  toll:        { label: 'Pedaggi',       color: '#64748b' },
-  fine:        { label: 'Multe',         color: '#dc2626' },
-  other:       { label: 'Altro',         color: '#64748b' }
+  maintenance: { label: 'Manutenzione', color: '#f59e0b', icon: '🔧' },
+  insurance:   { label: 'Assicurazione', color: '#6366f1', icon: '🛡️' },
+  tax:         { label: 'Bollo',          color: '#ef4444', icon: '📄' },
+  tires:       { label: 'Gomme',          color: '#f97316', icon: '🔩' },
+  wash:        { label: 'Lavaggio',       color: '#06b6d4', icon: '🚿' },
+  parking:     { label: 'Parcheggio',     color: '#8b5cf6', icon: '🅿️' },
+  toll:        { label: 'Pedaggi',        color: '#64748b', icon: '🛣️' },
+  fine:        { label: 'Multe',          color: '#dc2626', icon: '⚠️' },
+  other:       { label: 'Altro',          color: '#64748b', icon: '📋' }
 }
 function getCategoryInfo(v) {
-  // Prefer allExpenseCategories (managed list), fallback to builtinCategories
   const managed = data.value.settings?.allExpenseCategories || []
   if (managed.length) {
     const m = managed.find(x => x.value === v)
-    if (m) return { label: m.label, color: builtinCategories[v]?.color || '#64748b' }
+    if (m) return {
+      label: m.label,
+      icon:  m.icon  || builtinCategories[v]?.icon  || '📋',
+      color: builtinCategories[v]?.color || '#64748b'
+    }
   }
   if (builtinCategories[v]) return builtinCategories[v]
   const c = (data.value.settings?.customCategories || []).find(x => x.value === v)
@@ -81,18 +85,35 @@ const actions = computed(() => {
 })
 
 // ── Scadenze ──────────────────────────────────────────────────
-const deadlineTypes = [
+const DEFAULT_DEADLINE_TYPES = [
   { value: 'assicurazione', label: 'Assicurazione', icon: '🛡️' },
   { value: 'bollo',         label: 'Bollo',         icon: '📄' },
   { value: 'tagliando',     label: 'Tagliando',     icon: '🔧' },
   { value: 'revisione',     label: 'Revisione',     icon: '🔍' },
   { value: 'gomme',         label: 'Cambio Gomme',  icon: '⚙️' },
-  { value: 'altro',         label: 'Altro',         icon: '📌' }
+  { value: 'altro',         label: 'Altro',         icon: '📌' },
 ]
-const deadlines = computed(() => {
+const deadlineTypes = computed(() =>
+  (data.value.settings?.allDeadlineTypes?.length > 0)
+    ? data.value.settings.allDeadlineTypes
+    : DEFAULT_DEADLINE_TYPES
+)
+function getDlType(v) { return deadlineTypes.value.find(t => t.value === v) || { label: v, icon: '📌' } }
+
+const allDeadlines = computed(() => {
   if (!selectedVehicleId.value) return []
   return getDeadlinesByVehicle(selectedVehicleId.value)
 })
+const dlTypeFilter = ref(null) // null = tutte
+const deadlines = computed(() =>
+  dlTypeFilter.value
+    ? allDeadlines.value.filter(dl => dl.type === dlTypeFilter.value)
+    : allDeadlines.value
+)
+const activeDlTypes = computed(() =>
+  deadlineTypes.value.filter(t => allDeadlines.value.some(dl => dl.type === t.value))
+)
+
 function daysUntil(dateStr) {
   const today = new Date(); today.setHours(0,0,0,0)
   return Math.ceil((new Date(dateStr) - today) / 86400000)
@@ -107,19 +128,64 @@ function dlLabel(dl) {
   if (d === 0) return 'Scade oggi'
   return `${d} giorni`
 }
-function getDlType(v) { return deadlineTypes.find(t => t.value === v) || { label: v, icon: '📌' } }
 
-// Scadenza form inline
-const showDlForm = ref(false)
+// ── Gestione tipi scadenza ────────────────────────────────────
+const showDlManage   = ref(false)
+const dlEditLabels   = ref({})
+const dlNewLabel     = ref('')
+const dlNewIcon      = ref('📌')
+
+function openDlManage() {
+  if (!data.value.settings?.allDeadlineTypes?.length) {
+    setSetting('allDeadlineTypes', DEFAULT_DEADLINE_TYPES.map(t => ({ ...t })))
+  }
+  dlEditLabels.value = {}
+  deadlineTypes.value.forEach(t => { dlEditLabels.value[t.value] = t.label })
+  showDlManage.value = true
+}
+async function saveDlLabel(type) {
+  const newLabel = (dlEditLabels.value[type.value] || '').trim()
+  if (!newLabel || newLabel === type.label) return
+  await setSetting('allDeadlineTypes', deadlineTypes.value.map(t => t.value === type.value ? { ...t, label: newLabel } : t))
+}
+async function deleteDlType(type) {
+  if (deadlineTypes.value.length <= 1) return
+  const updated = deadlineTypes.value.filter(t => t.value !== type.value)
+  await setSetting('allDeadlineTypes', updated)
+  if (dlForm.value.type === type.value) dlForm.value.type = updated[0]?.value || ''
+}
+async function addDlType() {
+  const label = dlNewLabel.value.trim()
+  if (!label) return
+  const value = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36)
+  const updated = [...deadlineTypes.value, { value, label, icon: dlNewIcon.value || '📌' }]
+  await setSetting('allDeadlineTypes', updated)
+  dlEditLabels.value[value] = label
+  dlForm.value.type = value
+  dlNewLabel.value = ''
+  dlNewIcon.value = '📌'
+}
+async function resetDlTypes() {
+  if (!confirm('Ripristinare i tipi predefiniti?')) return
+  await setSetting('allDeadlineTypes', DEFAULT_DEADLINE_TYPES.map(t => ({ ...t })))
+  dlEditLabels.value = {}
+  DEFAULT_DEADLINE_TYPES.forEach(t => { dlEditLabels.value[t.value] = t.label })
+}
+
+// ── Form scadenza inline ──────────────────────────────────────
+const showDlForm  = ref(false)
 const editingDlId = ref(null)
 const dlForm = ref({ type: 'assicurazione', description: '', expiryDate: '', amount: '', reminderDays: 30, notes: '' })
+
 function openAddDl() {
   editingDlId.value = null
-  dlForm.value = { type: 'assicurazione', description: '', expiryDate: '', amount: '', reminderDays: 30, notes: '' }
+  showDlManage.value = false
+  dlForm.value = { type: deadlineTypes.value[0]?.value || 'assicurazione', description: '', expiryDate: '', amount: '', reminderDays: 30, notes: '' }
   showDlForm.value = true
 }
 function openEditDl(dl) {
   editingDlId.value = dl.id
+  showDlManage.value = false
   dlForm.value = { type: dl.type, description: dl.description || '', expiryDate: dl.expiryDate, amount: dl.amount || '', reminderDays: dl.reminderDays || 30, notes: dl.notes || '' }
   showDlForm.value = true
 }
@@ -230,6 +296,7 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
         <div v-else class="item-list">
           <div v-for="e in expenses" :key="e.id" class="card item-card" @click="router.push(`/expenses/edit/${e.id}`)">
             <div class="ic-top">
+              <span class="ic-emoji">{{ getCategoryInfo(e.category).icon }}</span>
               <span class="ic-badge" :style="{ background: getCategoryInfo(e.category).color + '18', color: getCategoryInfo(e.category).color }">
                 {{ getCategoryInfo(e.category).label }}
               </span>
@@ -274,12 +341,46 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
         <!-- Form inline scadenza -->
         <div v-if="showDlForm" class="card form-card">
           <h3 class="form-title">{{ editingDlId ? 'Modifica scadenza' : 'Nuova scadenza' }}</h3>
+
+          <!-- Tipo con chip grid + gestisci -->
           <div class="form-group">
-            <label class="form-label">Tipo *</label>
-            <select v-model="dlForm.type" class="form-select">
-              <option v-for="t in deadlineTypes" :key="t.value" :value="t.value">{{ t.icon }} {{ t.label }}</option>
-            </select>
+            <div class="cat-header">
+              <label class="form-label" style="margin:0">Tipo *</label>
+              <button class="manage-link" @click="showDlManage ? showDlManage = false : openDlManage()">
+                {{ showDlManage ? 'Chiudi' : '⚙ Gestisci' }}
+              </button>
+            </div>
+
+            <div v-if="!showDlManage" class="type-grid">
+              <button
+                v-for="t in deadlineTypes" :key="t.value"
+                type="button" class="type-chip"
+                :class="{ active: dlForm.type === t.value }"
+                @click="dlForm.type = t.value"
+              >{{ t.icon }} {{ t.label }}</button>
+            </div>
+
+            <div v-else class="manage-panel">
+              <div v-for="type in deadlineTypes" :key="type.value" class="manage-row">
+                <span class="type-icon-sm">{{ type.icon }}</span>
+                <input
+                  v-model="dlEditLabels[type.value]"
+                  type="text" class="form-input manage-input"
+                  @blur="saveDlLabel(type)" @keyup.enter="saveDlLabel(type)"
+                />
+                <button class="manage-del" @click="deleteDlType(type)" :disabled="deadlineTypes.length <= 1" title="Elimina">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+              <div class="manage-add-row">
+                <input v-model="dlNewIcon" type="text" class="form-input icon-input" placeholder="📌" maxlength="2" />
+                <input v-model="dlNewLabel" type="text" class="form-input manage-input" placeholder="Nuovo tipo…" @keyup.enter="addDlType" />
+                <button class="btn btn-sm btn-primary" :disabled="!dlNewLabel.trim()" @click="addDlType">+</button>
+              </div>
+              <button class="reset-link" @click="resetDlTypes">↺ Ripristina predefiniti</button>
+            </div>
           </div>
+
           <div class="form-group">
             <label class="form-label">Descrizione</label>
             <input v-model="dlForm.description" type="text" class="form-input" placeholder="es. Compagnia XYZ" />
@@ -307,6 +408,21 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
         </div>
 
         <template v-else>
+          <!-- Filtro per tipo -->
+          <div v-if="allDeadlines.length > 0" class="type-filter-bar">
+            <button class="type-filter-chip" :class="{ active: dlTypeFilter === null }" @click="dlTypeFilter = null">
+              Tutte <span class="filter-count">{{ allDeadlines.length }}</span>
+            </button>
+            <button
+              v-for="t in activeDlTypes" :key="t.value"
+              class="type-filter-chip" :class="{ active: dlTypeFilter === t.value }"
+              @click="dlTypeFilter = dlTypeFilter === t.value ? null : t.value"
+            >
+              {{ t.icon }} {{ t.label }}
+              <span class="filter-count">{{ allDeadlines.filter(dl => dl.type === t.value).length }}</span>
+            </button>
+          </div>
+
           <div v-if="deadlines.length === 0" class="empty-state" style="padding:40px 0">
             <h2>Nessuna scadenza</h2><p>Aggiungi la prima scadenza</p>
           </div>
@@ -316,7 +432,7 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
                 <span class="dl-icon">{{ getDlType(dl.type).icon }}</span>
                 <div class="dl-info">
                   <span class="ic-icon-label">{{ getDlType(dl.type).label }}</span>
-                  <span v-if="dl.description" class="ic-sub">{{ dl.description }}</span>
+                  <span v-if="dl.description" class="ic-sub-inline">{{ dl.description }}</span>
                 </div>
                 <span class="dl-badge" :class="dlStatus(dl)">{{ dlLabel(dl) }}</span>
                 <div class="dl-btns">
@@ -422,16 +538,61 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
 .ic-amount { font-size: 14px; font-weight: 700; color: var(--text-primary); flex-shrink: 0; }
 .ic-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
 
+/* ── Icona emoji spesa ── */
+.ic-emoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
+
 /* ── Scadenze ── */
 .form-card   { padding: 18px 16px; margin-bottom: 10px; }
 .form-title  { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
 .form-row    { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 
+/* Intestazione tipo + link gestisci */
+.cat-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.manage-link { background: none; border: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Chip grid tipo */
+.type-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.type-chip {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 11px; border-radius: 20px;
+  border: 1.5px solid var(--border); background: var(--bg-secondary);
+  color: var(--text-secondary); font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.type-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+/* Manage panel */
+.manage-panel { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; background: var(--bg-secondary); display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.manage-row   { display: flex; gap: 6px; align-items: center; }
+.type-icon-sm { font-size: 16px; flex-shrink: 0; width: 22px; text-align: center; }
+.manage-input { flex: 1; font-size: 13px; padding: 6px 10px; }
+.icon-input   { width: 42px; flex-shrink: 0; text-align: center; font-size: 15px; padding: 6px 4px; }
+.manage-del   { width: 28px; height: 28px; border-radius: var(--r-sm); background: none; border: 1px solid var(--border); color: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.manage-del:disabled { opacity: .3; cursor: not-allowed; }
+.manage-del svg { width: 12px; height: 12px; }
+.manage-add-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
+.reset-link  { background: none; border: none; font-size: 11px; color: var(--text-tertiary); cursor: pointer; text-align: left; padding: 2px 0; text-decoration: underline; }
+
+/* Filtro tipo */
+.type-filter-bar { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin-bottom: 6px; }
+.type-filter-bar::-webkit-scrollbar { display: none; }
+.type-filter-chip {
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 11px; border-radius: 20px;
+  border: 1.5px solid var(--border); background: var(--bg-secondary);
+  color: var(--text-secondary); font-size: 12px; font-weight: 500;
+  white-space: nowrap; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+}
+.type-filter-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+.filter-count { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 10px; background: rgba(0,0,0,0.1); }
+.type-filter-chip.active .filter-count { background: rgba(255,255,255,0.25); }
+
 .dl-card .ic-top { gap: 10px; align-items: flex-start; }
-.dl-icon   { font-size: 20px; flex-shrink: 0; padding-top: 1px; }
-.dl-info   { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.dl-badge  { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; background: var(--bg-secondary); color: var(--text-secondary); }
+.dl-icon     { font-size: 20px; flex-shrink: 0; padding-top: 1px; }
+.dl-info     { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ic-sub-inline { font-size: 12px; color: var(--text-secondary); }
+.dl-badge    { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; background: var(--bg-secondary); color: var(--text-secondary); }
 .dl-badge.expiring { background: rgba(245,158,11,0.12); color: #b45309; }
 .dl-badge.expired  { background: rgba(239,68,68,0.10);  color: #b91c1c; }
 .dl-btns   { display: flex; gap: 3px; }
