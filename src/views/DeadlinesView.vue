@@ -53,8 +53,9 @@ const deadlineTypes = [
   { value: 'altro',         label: 'Altro',         icon: '📌' }
 ]
 
-const showForm = ref(false)
-const editingId = ref(null)
+const showForm       = ref(false)
+const editingId      = ref(null)
+const activeTypeFilter = ref(null) // null = tutte
 const form = ref({
   type: 'assicurazione',
   description: '',
@@ -64,10 +65,24 @@ const form = ref({
   notes: ''
 })
 
-const deadlines = computed(() => {
+const allDeadlines = computed(() => {
   if (!selectedVehicleId.value) return []
   return getDeadlinesByVehicle(selectedVehicleId.value)
 })
+
+const deadlines = computed(() => {
+  if (!activeTypeFilter.value) return allDeadlines.value
+  return allDeadlines.value.filter(dl => dl.type === activeTypeFilter.value)
+})
+
+// Tipi effettivamente presenti nelle scadenze del veicolo
+const activeDeadlineTypes = computed(() =>
+  deadlineTypes.filter(t => allDeadlines.value.some(dl => dl.type === t.value))
+)
+
+function toggleTypeFilter(val) {
+  activeTypeFilter.value = activeTypeFilter.value === val ? null : val
+}
 
 function daysUntil(dateStr) {
   if (!dateStr) return null
@@ -225,6 +240,25 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
         </div>
         <button class="toggle" :class="{ on: notifEnabled }" @click="toggleNotifiche">
           <span class="toggle-thumb"></span>
+        </button>
+      </div>
+
+      <!-- Filtro per tipo (solo se ci sono scadenze) -->
+      <div v-if="allDeadlines.length > 0" class="type-filter-bar">
+        <button
+          class="type-filter-chip"
+          :class="{ active: activeTypeFilter === null }"
+          @click="activeTypeFilter = null"
+        >Tutte <span class="filter-count">{{ allDeadlines.length }}</span></button>
+        <button
+          v-for="t in activeDeadlineTypes"
+          :key="t.value"
+          class="type-filter-chip"
+          :class="{ active: activeTypeFilter === t.value }"
+          @click="toggleTypeFilter(t.value)"
+        >
+          {{ t.icon }} {{ t.label }}
+          <span class="filter-count">{{ allDeadlines.filter(dl => dl.type === t.value).length }}</span>
         </button>
       </div>
 
@@ -531,4 +565,47 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
 .action-btn:active { transform: scale(0.9); }
 .action-btn.danger { color: var(--danger); }
 .action-btn.danger:active { background: rgba(239,68,68,0.1); }
+
+/* ── Filtro tipo ─────────────────────────────────────────────── */
+.type-filter-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+}
+.type-filter-bar::-webkit-scrollbar { display: none; }
+
+.type-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.type-filter-chip.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+.filter-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.1);
+  line-height: 1.4;
+}
+.type-filter-chip.active .filter-count { background: rgba(255,255,255,0.25); }
 </style>

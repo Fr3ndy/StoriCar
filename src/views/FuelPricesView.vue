@@ -11,6 +11,51 @@ import AuthWall from '../components/AuthWall.vue'
 const { getSetting, data: storageData } = useStorage()
 const { isGuest } = useAuth()
 
+// ── Brand config: colori + abbreviazioni + dominio logo ───────────────────────
+const BRAND_CONFIG = {
+  'ENI':           { color: '#00a84f', short: 'ENI',  domain: 'eni.com' },
+  'Agip':          { color: '#00a84f', short: 'AGP',  domain: 'eni.com' },
+  'Q8':            { color: '#e30613', short: 'Q8',   domain: 'q8.it' },
+  'IP':            { color: '#0066cc', short: 'IP',   domain: 'apienergia.it' },
+  'ERG':           { color: '#f97316', short: 'ERG',  domain: 'erg.eu' },
+  'Esso':          { color: '#003087', short: 'ESS',  domain: 'esso.it' },
+  'Shell':         { color: '#dd1d21', short: 'SHL',  domain: 'shell.it' },
+  'Tamoil':        { color: '#e30613', short: 'TAM',  domain: 'tamoil.it' },
+  'TotalEnergies': { color: '#e30613', short: 'TOT',  domain: 'totalenergies.it' },
+  'Total':         { color: '#e30613', short: 'TOT',  domain: 'totalenergies.it' },
+  'Api':           { color: '#009fe3', short: 'API',  domain: 'apienergia.it' },
+  'Socar':         { color: '#006bb6', short: 'SOC',  domain: 'socar.it' },
+  'Costante':      { color: '#7c3aed', short: 'CST',  domain: null },
+  'Retitalia':     { color: '#0891b2', short: 'RTL',  domain: null },
+}
+
+function getBrand(bandiera) {
+  if (!bandiera) return null
+  // Match esatto o parziale case-insensitive
+  const key = Object.keys(BRAND_CONFIG).find(k =>
+    bandiera.toLowerCase().includes(k.toLowerCase())
+  )
+  return key ? BRAND_CONFIG[key] : null
+}
+
+function brandColor(bandiera) {
+  return getBrand(bandiera)?.color ?? '#64748b'
+}
+
+function brandShort(bandiera) {
+  if (!bandiera) return '?'
+  const b = getBrand(bandiera)
+  if (b) return b.short
+  // Fallback: primi 3 caratteri uppercase
+  return bandiera.replace(/\s+/g, '').slice(0, 3).toUpperCase()
+}
+
+function brandLogoUrl(bandiera) {
+  const domain = getBrand(bandiera)?.domain
+  if (!domain) return null
+  return `https://logo.clearbit.com/${domain}`
+}
+
 // ── Stato ─────────────────────────────────────────────────────────────────────
 const loading         = ref(false)
 const error           = ref(null)
@@ -21,6 +66,7 @@ const locating        = ref(false)
 const selectedId      = ref(null)
 const selectedFuel    = ref('Benzina')
 const coordSource     = ref(null) // null | 'gps' | 'settings' | 'lastRefuel' | 'manual'
+const logoErrors      = ref(new Set()) // brand domains che hanno fallito il caricamento logo
 
 // ── Raggio: cap a 100 km, fallback 100 se null/0 ──────────────────────────────
 function getRadius() {
@@ -43,6 +89,7 @@ const mapContainer = ref(null)
 let map            = null
 let clusterLayer   = null
 let userMarker     = null
+let radiusCircle   = null
 const markers      = {}
 
 // ── GPS dispositivo ───────────────────────────────────────────────────────────
@@ -127,7 +174,10 @@ async function load(refresh = false) {
     const json = await res.json()
     if (!json.ok) throw new Error(json.error || 'Errore server')
     data.value = json
-    nextTick(() => updateMarkers())
+    nextTick(() => {
+      updateMarkers()
+      placeRadiusCircle()
+    })
   } catch (e) {
     error.value = e.message || 'Errore di rete'
   } finally {
@@ -290,10 +340,7 @@ async function locateMe() {
     userLng.value = pos.coords.longitude
     if (map) {
       map.setView([userLat.value, userLng.value], 14)
-      if (userMarker) { userMarker.remove(); userMarker = null }
-      userMarker = L.circleMarker([userLat.value, userLng.value], {
-        radius: 9, fillColor: '#2563eb', color: 'white', weight: 2.5, fillOpacity: 1, zIndexOffset: 1000
-      }).bindTooltip('La tua posizione', { permanent: false }).addTo(map)
+      placeUserMarker()
     }
   } catch {
     alert('Impossibile ottenere la posizione GPS.')
@@ -302,21 +349,73 @@ async function locateMe() {
   }
 }
 
+function placeUserMarker() {
+  if (!map || userLat.value == null) return
+  if (userMarker) { userMarker.remove(); userMarker = null }
+  // Outer pulse ring
+  const pulseIcon = L.divIcon({
+    className: '',
+    html: `<div class="user-marker-wrap">
+      <div class="user-marker-pulse"></div>
+      <div class="user-marker-dot"></div>
+    </div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  })
+  userMarker = L.marker([userLat.value, userLng.value], {
+    icon: pulseIcon,
+    zIndexOffset: 1000,
+    interactive: false,
+  }).addTo(map)
+}
+
+function placeRadiusCircle() {
+  if (!map || userLat.value == null) return
+  if (radiusCircle) { radiusCircle.remove(); radiusCircle = null }
+  const km = getRadius()
+  radiusCircle = L.circle([userLat.value, userLng.value], {
+    radius: km * 1000,
+    color: '#6366f1',
+    weight: 1.5,
+    opacity: 0.35,
+    fillColor: '#6366f1',
+    fillOpacity: 0.04,
+    dashArray: '5 6',
+    interactive: false,
+  }).addTo(map)
+}
+
 // ── Mappa ─────────────────────────────────────────────────────────────────────
 function initMap() {
   if (!mapContainer.value || map) return
   const center = userLat.value != null
     ? [userLat.value, userLng.value]
     : [41.90, 12.49]
-  map = L.map(mapContainer.value, { zoomControl: false }).setView(center, 12)
+
+  map = L.map(mapContainer.value, {
+    zoomControl: false,
+    attributionControl: false,
+  }).setView(center, 13)
+
+  // Zoom in alto a destra
   L.control.zoom({ position: 'topright' }).addTo(map)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+
+  // Attribution minima in basso a sinistra
+  L.control.attribution({ position: 'bottomleft', prefix: false })
+    .addAttribution('© <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a> · <a href="https://carto.com" target="_blank">CARTO</a>')
+    .addTo(map)
+
+  // Tiles CartoDB Positron: sfondo chiaro e leggibile
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
     maxZoom: 19,
   }).addTo(map)
 
+  // Cluster con prezzo minimo e conteggio
   clusterLayer = L.markerClusterGroup({
-    maxClusterRadius: 50,
+    maxClusterRadius: 55,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
     iconCreateFunction(cluster) {
       const children = cluster.getAllChildMarkers()
       let minPrice = null
@@ -326,53 +425,100 @@ function initMap() {
       }
       const count = cluster.getChildCount()
       const color = minPrice != null ? prezzoColore(minPrice) : '#64748b'
-      const label = minPrice != null ? fmt(minPrice) : count
+      const label = minPrice != null ? fmt(minPrice) : '–'
       return L.divIcon({
         className: '',
         html: `<div style="
-          background:${color};
-          color:white;
+          background:white;
+          border:2px solid ${color};
+          color:${color};
           font-weight:800;
-          border-radius:20px;
-          padding:5px 10px;
+          border-radius:22px;
+          padding:5px 10px 5px 8px;
           font-size:11px;
           white-space:nowrap;
-          box-shadow:0 2px 8px rgba(0,0,0,.35);
-          border:2px solid white;
+          box-shadow:0 3px 10px rgba(0,0,0,.18);
           display:flex;
           align-items:center;
-          gap:4px;
+          gap:5px;
           width:max-content;
+          line-height:1;
         ">
-          <span style="font-weight: 400;">${count}×</span>${label}
+          <span style="
+            background:${color};
+            color:white;
+            border-radius:12px;
+            padding:1px 6px;
+            font-size:10px;
+            font-weight:700;
+          ">${count}</span>${label}
         </div>`,
-        iconAnchor: [28, 14],
+        iconAnchor: [30, 16],
       })
     }
   })
   clusterLayer.addTo(map)
 
+  // Cerchio raggio e marker utente
   if (userLat.value != null) {
-    userMarker = L.circleMarker([userLat.value, userLng.value], {
-      radius: 9, fillColor: '#2563eb', color: 'white', weight: 2.5, fillOpacity: 1, zIndexOffset: 1000
-    }).bindTooltip('La tua posizione', { permanent: false }).addTo(map)
+    placeUserMarker()
+    placeRadiusCircle()
   }
 
   updateMarkers()
 }
 
 function makeIcon(imp) {
-  const color = prezzoColore(getSelf(imp))
-  const label = prezzoLabel(imp)
-  const isSelected = imp.id === selectedId.value
-  const size = isSelected
-    ? 'font-size:11px;padding:4px 7px;box-shadow:0 0 0 3px white,0 0 0 5px ' + color
-    : 'font-size:10px;padding:2px 5px'
+  const priceColor  = prezzoColore(getSelf(imp))
+  const price       = prezzoLabel(imp)
+  const bColor      = brandColor(imp.bandiera)
+  const bShort      = brandShort(imp.bandiera)
+  const isSelected  = imp.id === selectedId.value
+
+  const shadow = isSelected
+    ? `0 0 0 2.5px white, 0 0 0 4.5px ${priceColor}, 0 4px 14px rgba(0,0,0,.25)`
+    : '0 2px 6px rgba(0,0,0,.18)'
+
+  const scale = isSelected ? 'transform:scale(1.18);' : ''
+
   return L.divIcon({
     className: '',
-    html: `<div style="background:${color};width:max-content;color:white;font-weight:700;border-radius:6px;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.3);${size}">${label}</div>`,
-    iconAnchor: [20, 10],
-    popupAnchor: [0, -14],
+    html: `<div style="
+      display:flex;
+      align-items:stretch;
+      background:white;
+      border:1.5px solid ${priceColor};
+      border-radius:8px;
+      overflow:hidden;
+      white-space:nowrap;
+      box-shadow:${shadow};
+      ${scale}
+      transition:all .15s;
+      width:max-content;
+    ">
+      <div style="
+        background:${bColor};
+        color:white;
+        font-size:7.5px;
+        font-weight:900;
+        letter-spacing:0.2px;
+        padding:3px 4px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        min-width:20px;
+      ">${bShort}</div>
+      <div style="
+        padding:3px 6px;
+        font-size:11px;
+        font-weight:800;
+        color:${priceColor};
+        display:flex;
+        align-items:center;
+      ">${price}</div>
+    </div>`,
+    iconAnchor: [24, 14],
+    popupAnchor: [0, -16],
   })
 }
 
@@ -410,6 +556,20 @@ function selectImp(id) {
 
 function openMaps(imp) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${imp.lat},${imp.lng}`, '_blank')
+}
+
+function onLogoError(bandiera, evt) {
+  const domain = getBrand(bandiera)?.domain
+  if (domain) {
+    logoErrors.value = new Set([...logoErrors.value, domain])
+  }
+  evt.target.style.display = 'none'
+}
+
+function showLogo(bandiera) {
+  const domain = getBrand(bandiera)?.domain
+  if (!domain) return false
+  return !logoErrors.value.has(domain)
 }
 
 function closePanel() {
@@ -557,7 +717,17 @@ watch(selectedId, (newId, oldId) => {
 
         <!-- Header -->
         <div class="panel-header">
-          <div class="panel-color-bar" :style="{ background: prezzoColore(getSelf(selectedImp)) }"></div>
+          <!-- Logo o badge brand -->
+          <div class="panel-brand-badge" :style="{ background: brandColor(selectedImp.bandiera) }">
+            <img
+              v-if="brandLogoUrl(selectedImp.bandiera) && showLogo(selectedImp.bandiera)"
+              :src="brandLogoUrl(selectedImp.bandiera)"
+              :alt="selectedImp.bandiera"
+              class="panel-brand-logo"
+              @error="onLogoError(selectedImp.bandiera, $event)"
+            />
+            <span v-else class="panel-brand-initial">{{ brandShort(selectedImp.bandiera) }}</span>
+          </div>
           <div class="panel-title-group">
             <div class="panel-name">{{ selectedImp.nome }}</div>
             <div class="panel-brand">{{ selectedImp.bandiera }}</div>
@@ -885,11 +1055,27 @@ watch(selectedId, (newId, oldId) => {
   padding: 13px 14px 12px;
   border-bottom: 1px solid var(--border);
 }
-.panel-color-bar {
-  width: 4px;
-  height: 36px;
-  border-radius: 3px;
+.panel-brand-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.panel-brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+.panel-brand-initial {
+  font-size: 11px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: 0.3px;
 }
 .panel-title-group { flex: 1; min-width: 0; }
 .panel-name {
@@ -1167,4 +1353,38 @@ watch(selectedId, (newId, oldId) => {
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to       { opacity: 0; }
+
+/* ── Marker utente con pulse ──────────────────────────────────────────────── */
+:global(.user-marker-wrap) {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+:global(.user-marker-dot) {
+  width: 14px;
+  height: 14px;
+  background: #2563eb;
+  border: 2.5px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(37,99,235,0.4);
+  position: relative;
+  z-index: 2;
+}
+:global(.user-marker-pulse) {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: rgba(37,99,235,0.25);
+  border-radius: 50%;
+  animation: pulse-ring 2s ease-out infinite;
+  z-index: 1;
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(0.6); opacity: 0.8; }
+  80%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
 </style>

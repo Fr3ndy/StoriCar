@@ -13,15 +13,15 @@ const vehicles  = computed(() => data.value.vehicles)
 
 // ── Categorie: lista completamente gestibile ──────────────────
 const DEFAULT_CATEGORIES = [
-  { value: 'maintenance', label: 'Manutenzione' },
-  { value: 'insurance',   label: 'Assicurazione' },
-  { value: 'tax',         label: 'Bollo' },
-  { value: 'tires',       label: 'Gomme' },
-  { value: 'wash',        label: 'Lavaggio' },
-  { value: 'parking',     label: 'Parcheggio' },
-  { value: 'toll',        label: 'Pedaggi' },
-  { value: 'fine',        label: 'Multe' },
-  { value: 'other',       label: 'Altro' }
+  { value: 'maintenance', label: 'Manutenzione', icon: '🔧' },
+  { value: 'insurance',   label: 'Assicurazione', icon: '🛡️' },
+  { value: 'tax',         label: 'Bollo',          icon: '📄' },
+  { value: 'tires',       label: 'Gomme',          icon: '🔩' },
+  { value: 'wash',        label: 'Lavaggio',       icon: '🚿' },
+  { value: 'parking',     label: 'Parcheggio',     icon: '🅿️' },
+  { value: 'toll',        label: 'Pedaggi',        icon: '🛣️' },
+  { value: 'fine',        label: 'Multe',          icon: '⚠️' },
+  { value: 'other',       label: 'Altro',          icon: '📋' }
 ]
 
 // Usa allExpenseCategories se impostato, altrimenti default
@@ -32,9 +32,10 @@ const categories = computed(() =>
 )
 
 // ── Gestione categorie ────────────────────────────────────────
-const showManage = ref(false)
-const editingLabels = ref({}) // { value: label }
+const showManage  = ref(false)
+const editingLabels = ref({})
 const newCatLabel   = ref('')
+const newCatIcon    = ref('📋')
 
 function openManage() {
   // Inizializza da default se non ancora personalizzato
@@ -65,11 +66,12 @@ async function addCategory() {
   const label = newCatLabel.value.trim()
   if (!label) return
   const value = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36)
-  const updated = [...categories.value, { value, label }]
+  const updated = [...categories.value, { value, label, icon: newCatIcon.value || '📋' }]
   await setSetting('allExpenseCategories', updated)
   editingLabels.value[value] = label
   form.value.category = value
   newCatLabel.value = ''
+  newCatIcon.value = '📋'
 }
 
 async function resetCategories() {
@@ -139,13 +141,25 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
             {{ showManage ? 'Chiudi' : '⚙ Gestisci' }}
           </button>
         </div>
-        <select v-if="!showManage" v-model="form.category" class="form-select">
-          <option v-for="cat in categories" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
-        </select>
+
+        <!-- Chip grid con icone -->
+        <div v-if="!showManage" class="type-grid">
+          <button
+            v-for="cat in categories"
+            :key="cat.value"
+            type="button"
+            class="type-chip"
+            :class="{ active: form.category === cat.value }"
+            @click="form.category = cat.value"
+          >
+            <span>{{ cat.icon || '📋' }}</span> {{ cat.label }}
+          </button>
+        </div>
 
         <!-- Manage panel -->
         <div v-else class="manage-panel">
           <div v-for="cat in categories" :key="cat.value" class="manage-row">
+            <span class="type-icon">{{ cat.icon || '📋' }}</span>
             <input
               v-model="editingLabels[cat.value]"
               type="text"
@@ -158,6 +172,7 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
             </button>
           </div>
           <div class="manage-add-row">
+            <input v-model="newCatIcon" type="text" class="form-input icon-input" placeholder="📋" maxlength="2" />
             <input v-model="newCatLabel" type="text" class="form-input manage-input" placeholder="Nuova categoria…" @keyup.enter="addCategory" />
             <button class="btn btn-sm btn-primary" :disabled="!newCatLabel.trim()" @click="addCategory">+</button>
           </div>
@@ -191,12 +206,40 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
 .form-row       { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-actions   { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 
-.cat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cat-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .manage-link { background: none; border: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
 
+/* Chip grid – stessa struttura di DeadlinesView */
+.type-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.type-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.type-chip.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
 .manage-panel { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; background: var(--bg-secondary); display: flex; flex-direction: column; gap: 6px; }
-.manage-row { display: flex; gap: 6px; align-items: center; }
+.manage-row   { display: flex; gap: 6px; align-items: center; }
+.type-icon    { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
 .manage-input { flex: 1; font-size: 13px; padding: 6px 10px; }
+.icon-input   { width: 44px; flex-shrink: 0; text-align: center; font-size: 16px; padding: 6px 4px; }
 .manage-del { width: 30px; height: 30px; border-radius: var(--r-sm); background: none; border: 1px solid var(--border); color: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .manage-del:disabled { opacity: .3; cursor: not-allowed; }
 .manage-del svg { width: 13px; height: 13px; }

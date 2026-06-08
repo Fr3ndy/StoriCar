@@ -13,22 +13,26 @@ const activeTab = ref('list') // 'list' | 'monthly'
 
 // ── Categorie: built-in + custom ─────────────────────────────
 const builtinCategories = {
-  maintenance: { label: 'Manutenzione', color: '#f59e0b' },
-  insurance:   { label: 'Assicurazione', color: '#6366f1' },
-  tax:         { label: 'Bollo',         color: '#ef4444' },
-  tires:       { label: 'Gomme',         color: '#f97316' },
-  wash:        { label: 'Lavaggio',      color: '#06b6d4' },
-  parking:     { label: 'Parcheggio',    color: '#8b5cf6' },
-  toll:        { label: 'Pedaggi',       color: '#64748b' },
-  fine:        { label: 'Multe',         color: '#dc2626' },
-  other:       { label: 'Altro',         color: '#64748b' }
+  maintenance: { label: 'Manutenzione', color: '#f59e0b', icon: '🔧' },
+  insurance:   { label: 'Assicurazione', color: '#6366f1', icon: '🛡️' },
+  tax:         { label: 'Bollo',          color: '#ef4444', icon: '📄' },
+  tires:       { label: 'Gomme',          color: '#f97316', icon: '🔩' },
+  wash:        { label: 'Lavaggio',       color: '#06b6d4', icon: '🚿' },
+  parking:     { label: 'Parcheggio',     color: '#8b5cf6', icon: '🅿️' },
+  toll:        { label: 'Pedaggi',        color: '#64748b', icon: '🛣️' },
+  fine:        { label: 'Multe',          color: '#dc2626', icon: '⚠️' },
+  other:       { label: 'Altro',          color: '#64748b', icon: '📋' }
 }
 
 function getCategoryInfo(categoryValue) {
   const managed = data.value.settings?.allExpenseCategories || []
   if (managed.length) {
     const m = managed.find(c => c.value === categoryValue)
-    if (m) return { label: m.label, color: builtinCategories[categoryValue]?.color || '#64748b' }
+    if (m) return {
+      label: m.label,
+      icon:  m.icon  || builtinCategories[categoryValue]?.icon  || '📋',
+      color: builtinCategories[categoryValue]?.color || '#64748b'
+    }
   }
   if (builtinCategories[categoryValue]) return builtinCategories[categoryValue]
   const custom = (data.value.settings?.customCategories || []).find(c => c.value === categoryValue)
@@ -108,27 +112,32 @@ async function confirmDelete(expense) {
         <div v-else class="expense-list">
           <div v-for="expense in expenses" :key="expense.id" class="card expense-card">
             <div class="expense-top">
+              <span class="exp-icon">{{ getCategoryInfo(expense.category).icon }}</span>
               <div class="expense-meta">
-                <span class="cat-pill" :style="{ background: getCategoryInfo(expense.category).color + '1a', color: getCategoryInfo(expense.category).color }">
-                  {{ getCategoryInfo(expense.category).label }}
-                </span>
-                <span class="expense-date">{{ formatDate(expense.date) }}</span>
+                <div class="exp-cat-row">
+                  <span class="cat-pill" :style="{ background: getCategoryInfo(expense.category).color + '1a', color: getCategoryInfo(expense.category).color }">
+                    {{ getCategoryInfo(expense.category).label }}
+                  </span>
+                  <span class="expense-date">{{ formatDate(expense.date) }}</span>
+                </div>
+                <div v-if="expense.description" class="expense-desc">{{ expense.description }}</div>
+                <div v-if="expense.notes" class="expense-notes">{{ expense.notes }}</div>
               </div>
-              <div class="expense-amount">{{ formatNumber(expense.amount) }} €</div>
-            </div>
-            <div v-if="expense.description" class="expense-desc">{{ expense.description }}</div>
-            <div v-if="expense.notes" class="expense-notes">{{ expense.notes }}</div>
-            <div class="expense-actions">
-              <button class="action-btn" @click="router.push(`/expenses/edit/${expense.id}`)" title="Modifica">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                </svg>
-              </button>
-              <button class="action-btn danger" @click="confirmDelete(expense)" title="Elimina">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-              </button>
+              <div class="exp-right">
+                <div class="expense-amount">{{ formatNumber(expense.amount) }} €</div>
+                <div class="expense-actions">
+                  <button class="action-btn" @click="router.push(`/expenses/edit/${expense.id}`)" title="Modifica">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button class="action-btn danger" @click="confirmDelete(expense)" title="Elimina">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -148,6 +157,7 @@ async function confirmDelete(expense) {
             </div>
             <div class="monthly-items">
               <div v-for="e in group.items" :key="e.id" class="monthly-row">
+                <span class="monthly-row-icon">{{ getCategoryInfo(e.category).icon }}</span>
                 <span class="monthly-row-cat" :style="{ color: getCategoryInfo(e.category).color }">
                   {{ getCategoryInfo(e.category).label }}
                 </span>
@@ -182,11 +192,19 @@ async function confirmDelete(expense) {
 .expense-top {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
-.expense-meta { display: flex; flex-direction: column; gap: 5px; }
+.exp-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.expense-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+
+.exp-cat-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
 .cat-pill {
   display: inline-block;
@@ -194,14 +212,21 @@ async function confirmDelete(expense) {
   padding: 3px 9px; border-radius: 20px; width: fit-content;
 }
 
-.expense-date   { font-size: 12px; color: var(--text-secondary); }
-.expense-amount { font-size: 22px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
-.expense-desc   { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-top: 10px; }
-.expense-notes  { font-size: 13px; color: var(--text-secondary); font-style: italic; margin-top: 4px; }
+.expense-date  { font-size: 12px; color: var(--text-secondary); }
+.expense-desc  { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.expense-notes { font-size: 12px; color: var(--text-secondary); font-style: italic; }
+
+.exp-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.expense-amount { font-size: 18px; font-weight: 800; color: var(--text-primary); white-space: nowrap; }
 
 .expense-actions {
-  display: flex; gap: 4px; justify-content: flex-end;
-  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+  display: flex; gap: 4px;
 }
 
 .action-btn {
@@ -239,6 +264,7 @@ async function confirmDelete(expense) {
   font-size: 13px;
 }
 .monthly-row:first-child { border-top: none; }
+.monthly-row-icon   { font-size: 15px; flex-shrink: 0; line-height: 1; }
 .monthly-row-cat    { font-weight: 600; flex-shrink: 0; }
 .monthly-row-desc   { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monthly-row-amount { font-weight: 700; color: var(--text-primary); flex-shrink: 0; margin-left: auto; }
