@@ -58,7 +58,7 @@ function fmtCur(n)     { return (n == null || isNaN(n)) ? '—' : '€ ' + fmt(n
           </div>
           <div v-if="stats.fuelRecords.value[0]?.computerConsumption" class="vc-cons-item">
             <span class="vc-cons-label">Computer</span>
-            <span class="vc-cons-val">{{ fmt(stats.fuelRecords.value[0].computerConsumption, 1) }} <span>{{ (data.value.settings?.consumptionUnit || 'kmL') === 'L100km' ? 'L/100km' : 'km/L' }}</span></span>
+            <span class="vc-cons-val">{{ fmt(stats.fuelRecords.value[0].computerConsumption, 1) }} <span>{{ (data.value?.settings?.consumptionUnit || 'kmL') === 'L100km' ? 'L/100km' : 'km/L' }}</span></span>
           </div>
           <div class="vc-cons-item">
             <span class="vc-cons-label">Costo/km</span>
