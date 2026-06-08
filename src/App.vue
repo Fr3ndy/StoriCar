@@ -4,14 +4,15 @@ import { useRouter, useRoute } from 'vue-router'
 import { useStorage } from './composables/useStorage'
 import { useAuth } from './composables/useAuth'
 import { useNotifications } from './composables/useNotifications'
-import WhatsNewModal from './components/WhatsNewModal.vue'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 
 const router = useRouter()
 const route  = useRoute()
-const { getTheme, setTheme, data, dataReady } = useStorage()
+const { getTheme, setTheme, data, dataReady, selectedVehicleId, setDefaultVehicle } = useStorage()
 const { user, signOut } = useAuth()
 const { checkDeadlines } = useNotifications()
+
+const vehicles = computed(() => data.value.vehicles)
 
 // Polling ogni 60s — forza reload automatico quando c'è un aggiornamento
 useRegisterSW({
@@ -58,17 +59,43 @@ const pageTitle = computed(() => ({
   home: 'Storicar', vehicles: 'Veicoli', fuel: 'Rifornimenti',
   'fuel-add': 'Nuovo Rifornimento', 'fuel-edit': 'Modifica Rifornimento',
   expenses: 'Spese', 'expenses-add': 'Nuova Spesa', 'expenses-edit': 'Modifica Spesa',
-  deadlines: 'Scadenze', stats: 'Statistiche', map: 'Mappa',
-  'fuel-prices': 'Prezzi', settings: 'Impostazioni', changelog: 'Novità'
+  stats: 'Statistiche', map: 'Mappa',
+  'fuel-prices': 'Prezzi', settings: 'Impostazioni',
+  actions: 'Azioni', 'action-add': 'Nuova Azione', 'action-edit': 'Modifica Azione',
+  hub: 'Attività', 'fuel-prices': 'Prezzi Carburante'
 }[route.name] || 'Storicar'))
 
-const moreRoutes  = ['vehicles', 'stats', 'map', 'settings', 'expenses', 'expenses-add', 'expenses-edit', 'deadlines', 'changelog']
+const moreRoutes  = ['vehicles', 'stats', 'map', 'settings']
 const isMoreActive = computed(() => moreRoutes.includes(route.name))
 
-// Hide shell on login + public profile pages
-const isShell = computed(() => route.name !== 'login' && route.name !== 'public-profile')
+// Hide shell on login
+const isShell = computed(() => route.name !== 'login')
 
-watch(dataReady, (val) => { console.log('[App] dataReady:', val) })
+// Inizializza il veicolo selezionato globalmente quando i dati sono pronti
+// Se non c'è un default salvato, usa il primo veicolo e persistilo
+watch(dataReady, async (ready) => {
+  if (!ready) return
+  const defaultId = data.value.settings?.defaultVehicleId
+  if (defaultId && vehicles.value.find(v => v.id === defaultId)) {
+    selectedVehicleId.value = defaultId
+  } else if (vehicles.value.length > 0) {
+    selectedVehicleId.value = vehicles.value[0].id
+    await setDefaultVehicle(vehicles.value[0].id)
+  }
+}, { immediate: true })
+
+// Quando cambia la lista veicoli (aggiunta/rimozione), riallinea la selezione
+watch(vehicles, (vList) => {
+  if (!vList.length) { selectedVehicleId.value = null; return }
+  if (!vList.find(v => v.id === selectedVehicleId.value)) {
+    selectedVehicleId.value = vList[0].id
+  }
+})
+
+async function onHeaderVehicleChange(id) {
+  selectedVehicleId.value = id
+  await setDefaultVehicle(id)
+}
 
 onMounted(() => {
   setTheme(getTheme())
@@ -93,9 +120,18 @@ onMounted(() => {
 
     <!-- ── Header ── -->
     <header v-if="isShell" class="header">
-      <div class="header-left">
+      <!-- <div class="header-left">
         <div class="header-dot"></div>
-        <h1>{{ pageTitle }}</h1>
+      </div> -->
+      <!-- Vehicle pills (visibili solo quando ci sono veicoli) -->
+      <div v-if="vehicles.length > 0" class="header-vehicles">
+        <button
+          v-for="v in vehicles"
+          :key="v.id"
+          class="vehicle-pill"
+          :class="{ active: v.id === selectedVehicleId }"
+          @click="onHeaderVehicleChange(v.id)"
+        >{{ v.name }}</button>
       </div>
       <button class="header-settings-btn" @click="router.push('/settings')" title="Impostazioni" :class="{ active: route.name === 'settings' }">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -124,10 +160,10 @@ onMounted(() => {
     </main>
 
     <!-- ── Beta banner ── -->
-    <div v-if="isShell" class="beta-banner">
+    <!-- <div v-if="isShell" class="beta-banner">
       <span class="beta-pill">Beta</span>
       <span>I dati potrebbero subire variazioni senza preavviso.</span>
-    </div>
+    </div> -->
 
     <!-- ── Bottom nav ── -->
     <nav v-if="isShell" class="bottom-nav">
@@ -145,11 +181,11 @@ onMounted(() => {
         <span>Carburante</span>
       </router-link>
 
-      <router-link to="/stats" class="nav-item" :class="{ active: route.name === 'stats' }">
+      <router-link to="/hub" class="nav-item" :class="{ active: route.name === 'hub' || route.name?.startsWith('expenses') || route.name?.startsWith('action') }">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
         </svg>
-        <span>Statistiche</span>
+        <span>Attività</span>
       </router-link>
 
       <router-link to="/fuel-prices" class="nav-item" :class="{ active: route.name === 'fuel-prices' }">
@@ -166,9 +202,6 @@ onMounted(() => {
         <span>Altro</span>
       </button>
     </nav>
-
-    <!-- ── WhatsNew modal ── -->
-    <WhatsNewModal v-if="isShell && dataReady" />
 
     <!-- ── Drawer overlay ── -->
     <Transition name="overlay">
@@ -192,32 +225,20 @@ onMounted(() => {
 
         <div class="drawer-body">
 
-          <button class="drawer-item" :class="{ active: route.name?.startsWith('expenses') }" @click="navigateTo('/expenses')">
-            <span class="drawer-icon" style="background:rgba(16,185,129,0.10);color:#10b981">
+          <button class="drawer-item" :class="{ active: route.name === 'stats' }" @click="navigateTo('/stats')">
+            <span class="drawer-icon">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
               </svg>
             </span>
-            <span class="drawer-item-label">Spese</span>
-            <svg class="drawer-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-            </svg>
-          </button>
-
-          <button class="drawer-item" :class="{ active: route.name === 'deadlines' }" @click="navigateTo('/deadlines')">
-            <span class="drawer-icon" style="background:rgba(245,158,11,0.10);color:#f59e0b">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            </span>
-            <span class="drawer-item-label">Scadenze</span>
+            <span class="drawer-item-label">Statistiche</span>
             <svg class="drawer-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
           </button>
 
           <button class="drawer-item" :class="{ active: route.name === 'vehicles' }" @click="navigateTo('/vehicles')">
-            <span class="drawer-icon" style="background:rgba(37,99,235,0.10);color:#2563eb">
+            <span class="drawer-icon">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
               </svg>
@@ -229,7 +250,7 @@ onMounted(() => {
           </button>
 
           <button class="drawer-item" :class="{ active: route.name === 'map' }" @click="navigateTo('/map')">
-            <span class="drawer-icon" style="background:rgba(168,85,247,0.10);color:#a855f7">
+            <span class="drawer-icon">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -241,22 +262,10 @@ onMounted(() => {
             </svg>
           </button>
 
-          <button class="drawer-item" :class="{ active: route.name === 'changelog' }" @click="navigateTo('/changelog')">
-            <span class="drawer-icon" style="background:rgba(99,102,241,0.10);color:#6366f1">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-              </svg>
-            </span>
-            <span class="drawer-item-label">Novità</span>
-            <svg class="drawer-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-            </svg>
-          </button>
-
           <div class="drawer-divider"></div>
 
           <button class="drawer-item" :class="{ active: route.name === 'settings' }" @click="navigateTo('/settings')">
-            <span class="drawer-icon" style="background:rgba(100,116,139,0.10);color:#64748b">
+            <span class="drawer-icon">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -295,12 +304,36 @@ onMounted(() => {
 .app { min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ── Header ── */
-.header-left { display: flex; align-items: center; gap: 8px; }
+.header-left { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.header-vehicles {
+  display: flex; gap: 5px; overflow-x: auto; flex: 1;
+  padding: 0 8px; scrollbar-width: none;
+}
+.header-vehicles::-webkit-scrollbar { display: none; }
+
+.vehicle-pill {
+  padding: 4px 11px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.vehicle-pill.active {
+  background: var(--text-primary);
+  color: var(--bg-card);
+  border-color: var(--text-primary);
+}
+.vehicle-pill:not(.active):active { opacity: .7; }
 
 .header-dot {
-  width: 8px; height: 8px;
+  width: 7px; height: 7px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--text-primary);
   flex-shrink: 0;
 }
 
@@ -327,12 +360,12 @@ onMounted(() => {
   font-size: 11px; color: var(--text-secondary); line-height: 1.4;
 }
 .beta-pill {
-  background: var(--primary-soft); color: var(--primary);
+  background: var(--bg-secondary); color: var(--text-secondary);
   font-size: 10px; font-weight: 700;
   padding: 1px 7px; border-radius: 20px;
   text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0;
+  border: 1px solid var(--border);
 }
-[data-theme="dark"] .beta-pill { background: var(--primary-glow); color: #93c5fd; }
 
 /* ── Drawer overlay ── */
 .drawer-overlay {
@@ -393,11 +426,15 @@ onMounted(() => {
   text-align: left; transition: background .12s;
 }
 .drawer-item:active { background: var(--bg-secondary); }
-.drawer-item.active .drawer-item-label { color: var(--primary); font-weight: 600; }
+.drawer-item.active .drawer-item-label { color: var(--text-primary); font-weight: 700; }
+.drawer-item.active .drawer-icon { background: var(--text-primary); color: var(--bg-card); border-color: var(--text-primary); }
 
 .drawer-icon {
   width: 34px; height: 34px;
   border-radius: var(--r);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -418,11 +455,11 @@ onMounted(() => {
 
 .drawer-avatar {
   width: 32px; height: 32px; border-radius: 50%;
-  background: var(--primary-soft); color: var(--primary);
+  background: var(--bg-secondary); color: var(--text-primary);
+  border: 1px solid var(--border);
   font-size: 13px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-[data-theme="dark"] .drawer-avatar { background: var(--primary-glow); color: #93c5fd; }
 
 .drawer-email {
   font-size: 12px; color: var(--text-secondary);
@@ -439,5 +476,6 @@ onMounted(() => {
   transition: background 0.15s;
 }
 .signout-btn:active { background: rgba(239,68,68,0.15); }
-.signout-btn svg { width: 14px; height: 14px; }
+.signout-btn svg { width: 14px; height: 14px;
+}
 </style>

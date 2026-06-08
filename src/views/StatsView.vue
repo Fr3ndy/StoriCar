@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 import { useStatistics } from '../composables/useStatistics'
@@ -24,12 +24,10 @@ ChartJS.register(
 )
 
 const router = useRouter()
-const { data, dataReady, getDefaultVehicleId, setDefaultVehicle } = useStorage()
+const { data, selectedVehicleId } = useStorage()
 
-const selectedVehicleId = ref(null)
 const vehicles = computed(() => data.value.vehicles)
 const hasVehicles = computed(() => vehicles.value.length > 0)
-const defaultVehicleId = computed(() => data.value.settings?.defaultVehicleId)
 
 // Period filter
 const filterFrom = ref('')
@@ -43,20 +41,7 @@ const filters = computed(() => ({
 
 const stats = useStatistics(selectedVehicleId, filters)
 
-watch(dataReady, (ready) => {
-  if (!ready) return
-  const defaultId = getDefaultVehicleId()
-  if (defaultId && vehicles.value.find(v => v.id === defaultId)) {
-    selectedVehicleId.value = defaultId
-  } else if (vehicles.value.length > 0) {
-    selectedVehicleId.value = vehicles.value[0].id
-  }
-}, { immediate: true })
 
-function onVehicleChange(e) {
-  selectedVehicleId.value = e.target.value
-  setDefaultVehicle(e.target.value)
-}
 
 function setQuickFilter(type) {
   activeFilter.value = type
@@ -326,15 +311,6 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
     </div>
 
     <div v-else>
-
-      <!-- Vehicle selector -->
-      <div style="margin-bottom:12px">
-        <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
-          <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
-          </option>
-        </select>
-      </div>
 
       <!-- ── FILTRO PERIODO ── -->
       <div class="period-filter">

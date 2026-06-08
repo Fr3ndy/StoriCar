@@ -8,13 +8,11 @@ import L from 'leaflet'
 
 const router = useRouter()
 const { isGuest } = useAuth()
-const { data, getDefaultVehicleId, setDefaultVehicle, getVehicle } = useStorage()
+const { data, selectedVehicleId, getVehicle } = useStorage()
 
 const mapContainer = ref(null)
 let map = null
 let markersLayer = null
-
-const selectedVehicleId = ref(null)
 
 const vehicles = computed(() => data.value.vehicles)
 const hasVehicles = computed(() => vehicles.value.length > 0)
@@ -27,23 +25,13 @@ const fuelRecordsWithLocation = computed(() => {
 })
 
 onMounted(() => {
-  const defaultId = getDefaultVehicleId()
-  if (defaultId && vehicles.value.find(v => v.id === defaultId)) {
-    selectedVehicleId.value = defaultId
-  } else if (vehicles.value.length > 0) {
-    selectedVehicleId.value = vehicles.value[0].id
-  }
-
   nextTick(() => {
     initMap()
   })
 })
 
-function onVehicleChange(e) {
-  selectedVehicleId.value = e.target.value
-  setDefaultVehicle(e.target.value)
-  updateMarkers()
-}
+// ricalcola i marker quando cambia il veicolo selezionato globalmente
+watch(selectedVehicleId, () => { updateMarkers() })
 
 function initMap() {
   if (!mapContainer.value) return
@@ -60,13 +48,14 @@ function initMap() {
   updateMarkers()
 }
 
+const markerRefs = {}
+
 function updateMarkers() {
   if (!markersLayer) return
-
   markersLayer.clearLayers()
+  Object.keys(markerRefs).forEach(k => delete markerRefs[k])
 
   const records = fuelRecordsWithLocation.value
-
   if (records.length === 0) return
 
   const bounds = []
@@ -74,37 +63,46 @@ function updateMarkers() {
   records.forEach((record, index) => {
     const { lat, lng } = record.location
 
-    // Custom icon with number
     const icon = L.divIcon({
       className: 'custom-marker',
-      html: `<div class="marker-pin">${index + 1}</div>`,
-      iconSize: [30, 30],
-      iconAnchor: [15, 30],
-      popupAnchor: [0, -30]
+      html: `<div class="marker-pin"><span>${index + 1}</span></div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -34]
     })
 
     const marker = L.marker([lat, lng], { icon })
 
-    // Popup content
-    const date = new Date(record.date).toLocaleDateString('it-IT')
+    const date = new Date(record.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
+    const fmtEur = (n) => n != null ? n.toFixed(2).replace('.', ',') + ' €' : '—'
+    const fmtL   = (n) => n != null ? n.toFixed(2).replace('.', ',') + ' L' : '—'
+    const fmtPpl = (n) => n != null ? n.toFixed(3).replace('.', ',') + ' €/L' : '—'
+
     const popupContent = `
       <div class="map-popup">
-        <strong>${date}</strong><br>
-        ${record.amount?.toFixed(2)} € - ${record.liters?.toFixed(2)} L<br>
-        ${record.pricePerLiter?.toFixed(3)} €/L<br>
-        ${record.address ? `<small>${record.address}</small>` : ''}
+        <div class="map-popup-date">${date}</div>
+        <div class="map-popup-row"><span>${fmtEur(record.amount)}</span><span>${fmtL(record.liters)}</span><span>${fmtPpl(record.pricePerLiter)}</span></div>
+        ${record.address ? `<div class="map-popup-addr">${record.address}</div>` : ''}
       </div>
     `
 
     marker.bindPopup(popupContent)
     marker.addTo(markersLayer)
+    markerRefs[record.id] = marker
 
     bounds.push([lat, lng])
   })
 
   if (bounds.length > 0) {
-    map.fitBounds(bounds, { padding: [50, 50] })
+    map.fitBounds(bounds, { padding: [40, 40] })
   }
+}
+
+function panToRecord(record) {
+  const { lat, lng } = record.location
+  map.setView([lat, lng], 15, { animate: true })
+  const m = markerRefs[record.id]
+  if (m) m.openPopup()
 }
 
 watch(selectedVehicleId, () => {
@@ -146,38 +144,36 @@ function formatDate(dateStr) {
     </div>
 
     <div v-else>
-      <!-- Vehicle selector -->
-      <div class="vehicle-selector">
-        <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
-          <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.name }} {{ v.plate ? `(${v.plate})` : '' }}
-          </option>
-        </select>
-      </div>
-
       <!-- Map -->
       <div ref="mapContainer" class="map-container"></div>
 
       <!-- Location list -->
-      <div v-if="fuelRecordsWithLocation.length === 0" class="card" style="margin-top:16px">
-        <div class="empty-state" style="padding: 20px;">
-          <p>Nessun rifornimento con posizione registrata</p>
-          <small>Quando registri un rifornimento, usa "Rileva posizione" per salvare dove hai fatto rifornimento</small>
-        </div>
+      <div v-if="fuelRecordsWithLocation.length === 0" class="card empty-map">
+        <p>Nessun rifornimento con posizione</p>
+        <small>Usa "Rileva posizione" quando aggiungi un rifornimento</small>
       </div>
 
-      <div v-else class="card" style="margin-top:16px">
-        <h3 class="card-title" style="margin-bottom: 12px;">Rifornimenti sulla mappa ({{ fuelRecordsWithLocation.length }})</h3>
+      <div v-else class="card fuel-list-card">
+        <div class="fuel-list-header">
+          <span class="card-title">Rifornimenti</span>
+          <span class="fuel-list-count">{{ fuelRecordsWithLocation.length }}</span>
+        </div>
         <div
-          v-for="(record, index) in fuelRecordsWithLocation.slice(0, 5)"
+          v-for="(record, index) in fuelRecordsWithLocation"
           :key="record.id"
-          class="list-item"
+          class="fuel-list-row"
+          @click="panToRecord(record)"
         >
-          <div class="location-number">{{ index + 1 }}</div>
-          <div class="list-item-content">
-            <div class="list-item-title">{{ formatDate(record.date) }} - {{ formatNumber(record.amount) }} €</div>
-            <div class="list-item-subtitle" v-if="record.address">{{ record.address }}</div>
+          <div class="fl-num">{{ index + 1 }}</div>
+          <div class="fl-info">
+            <div class="fl-main">{{ formatDate(record.date) }} · {{ formatNumber(record.amount) }} €</div>
+            <div class="fl-sub">{{ formatNumber(record.liters) }} L · {{ formatNumber(record.pricePerLiter, 3) }} €/L
+              <span v-if="record.address"> · {{ record.address }}</span>
+            </div>
           </div>
+          <svg class="fl-arrow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
         </div>
       </div>
     </div>
@@ -186,75 +182,81 @@ function formatDate(dateStr) {
 </template>
 
 <style>
-/* Leaflet marker styles */
-.custom-marker {
-  background: transparent;
-  border: none;
-}
+/* Leaflet marker — global so Leaflet can apply it */
+.custom-marker { background: transparent; border: none; }
 
 .marker-pin {
-  width: 30px;
-  height: 30px;
-  background: var(--primary, #3b82f6);
+  width: 32px; height: 32px;
+  background: #111;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  font-size: 12px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
 }
-
-.marker-pin::after {
-  content: attr(data-number);
+.marker-pin span {
   transform: rotate(45deg);
+  color: #fff; font-weight: 700; font-size: 11px;
 }
 
-.map-popup {
-  font-size: 14px;
-  line-height: 1.4;
-}
+.map-popup { font-size: 13px; line-height: 1.5; min-width: 160px; }
+.map-popup-date  { font-weight: 700; margin-bottom: 4px; }
+.map-popup-row   { display: flex; gap: 8px; color: #444; flex-wrap: wrap; }
+.map-popup-addr  { margin-top: 5px; font-size: 11px; color: #666; }
 
-.map-popup small {
-  color: #666;
-  display: block;
-  margin-top: 4px;
-}
+/* Leaflet popup overrides */
+.leaflet-popup-content-wrapper { border-radius: 10px !important; }
+.leaflet-popup-tip-container { display: none; }
 </style>
 
 <style scoped>
 .map-container {
-  height: 350px;
+  height: 360px;
   border-radius: var(--r-md);
   overflow: hidden;
+  border: 1px solid var(--border);
   z-index: 1;
+  margin-bottom: 12px;
 }
 
-.location-number {
-  width: 24px;
-  height: 24px;
-  background: var(--primary);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
-  margin-right: 12px;
-  flex-shrink: 0;
+.empty-map {
+  text-align: center; padding: 24px 16px; color: var(--text-secondary); font-size: 14px;
+}
+.empty-map small { display: block; margin-top: 6px; font-size: 12px; color: var(--text-tertiary); }
+
+.fuel-list-card { padding: 0; overflow: hidden; margin-bottom: 24px; }
+
+.fuel-list-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.fuel-list-count {
+  font-size: 12px; font-weight: 700;
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 20px;
+  padding: 2px 8px;
 }
 
-.list-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
+.fuel-list-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .12s;
+}
+.fuel-list-row:last-child { border-bottom: none; }
+.fuel-list-row:active { background: var(--bg-secondary); }
+
+.fl-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--text-primary); color: var(--bg-card);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-.list-item:last-child {
-  border-bottom: none;
+.fl-info { flex: 1; min-width: 0; }
+.fl-main { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.fl-sub  {
+  font-size: 11px; color: var(--text-secondary); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+.fl-arrow { width: 14px; height: 14px; color: var(--text-tertiary); flex-shrink: 0; }
 </style>

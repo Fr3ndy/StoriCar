@@ -5,7 +5,6 @@ import { useStorage } from '../composables/useStorage'
 import { useAuth } from '../composables/useAuth'
 import { useNotifications } from '../composables/useNotifications'
 import { supabase } from '../lib/supabase'
-import { APP_VERSION } from '../lib/changelog'
 
 const router = useRouter()
 const { user, isGuest, signInWithGoogle, signOut } = useAuth()
@@ -66,25 +65,6 @@ async function toggleNotifications(enabled) {
   await setSetting('notificationsEnabled', enabled)
 }
 
-// ── Profilo pubblico ──────────────────────────────────────────
-const publicProfileCopied = ref(false)
-const isPublic = computed({
-  get: () => !!data.value.settings.isPublic,
-  set: (v) => setSetting('isPublic', v),
-})
-const publicProfileUrl = computed(() => {
-  const username = data.value.settings.username
-  if (!username) return ''
-  const base = window.location.origin + window.location.pathname
-  return base + '#/u/' + encodeURIComponent(username)
-})
-
-async function copyPublicLink() {
-  if (!publicProfileUrl.value) return
-  await navigator.clipboard.writeText(publicProfileUrl.value)
-  publicProfileCopied.value = true
-  setTimeout(() => { publicProfileCopied.value = false }, 2000)
-}
 
 // ── Avatar upload ─────────────────────────────────────────────
 const avatarInput     = ref(null)
@@ -212,6 +192,11 @@ const totalDeadlines = computed(() => (data.value.deadlines || []).length)
 function toggleTheme() {
   setTheme(currentTheme.value === 'light' ? 'dark' : 'light')
 }
+
+// ── Categorie personalizzate ─────────────────────────────────
+
+
+
 
 function downloadData() {
   saveToFile()
@@ -391,7 +376,7 @@ async function resetData() {
     </div> -->
 
     <!-- ── Riepilogo dati ── -->
-    <div class="data-summary">
+    <!-- <div class="data-summary">
       <div class="summary-item">
         <div class="summary-val">{{ totalVehicles }}</div>
         <div class="summary-lbl">Veicoli</div>
@@ -408,7 +393,7 @@ async function resetData() {
         <div class="summary-val">{{ totalDeadlines }}</div>
         <div class="summary-lbl">Scadenze</div>
       </div>
-    </div>
+    </div> -->
 
     <!-- ── Aspetto ── -->
     <div class="settings-group">
@@ -580,47 +565,6 @@ async function resetData() {
       </div>
     </div>
 
-    <!-- ── Profilo pubblico ── -->
-    <div v-if="!isGuest" class="settings-group">
-      <div class="group-title">Profilo pubblico</div>
-
-      <div class="setting-item">
-        <div class="setting-info">
-          <div class="setting-label">Rendi il profilo pubblico</div>
-          <div class="setting-description">
-            Il tuo profilo sarà visibile a chiunque abbia il link
-          </div>
-        </div>
-        <label class="toggle">
-          <input
-            type="checkbox"
-            :checked="isPublic"
-            @change="e => setSetting('isPublic', e.target.checked)"
-          />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-
-      <div v-if="isPublic" class="setting-item setting-item-col">
-        <div class="setting-info">
-          <div class="setting-label">Link pubblico</div>
-          <div v-if="publicProfileUrl" class="setting-description public-link-preview">
-            {{ publicProfileUrl }}
-          </div>
-          <div v-else class="setting-description" style="color: var(--warning, #f59e0b)">
-            Imposta un username nelle info profilo per generare il link
-          </div>
-        </div>
-        <button v-if="publicProfileUrl" class="btn btn-sm btn-secondary" @click="copyPublicLink">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:14px;height:14px">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
-          </svg>
-          {{ publicProfileCopied ? 'Copiato!' : 'Copia link' }}
-        </button>
-      </div>
-    </div>
-
     <!-- ── Veicoli ── -->
     <div class="settings-group">
       <div class="group-title">Veicoli</div>
@@ -777,14 +721,7 @@ async function resetData() {
         </svg>
       </div>
       <div class="app-footer-name">Storicar</div>
-      <div class="app-footer-version">Versione {{ APP_VERSION }}</div>
       <div class="app-footer-desc">Traccia le spese della tua auto in modo semplice</div>
-      <button class="app-footer-changelog" @click="router.push('/changelog')">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-        </svg>
-        Vedi novità e versioni
-      </button>
       <div class="app-footer-author">
         Sviluppato da
         <a href="https://github.com/Fr3ndy/StoriCar" target="_blank" rel="noopener" class="app-footer-link">Andrea Spina</a>
@@ -1151,6 +1088,7 @@ async function resetData() {
   padding: 12px 16px 8px;
   border-bottom: 1px solid var(--border);
 }
+
 
 .danger-group {
   border-color: rgba(239,68,68,0.3);
