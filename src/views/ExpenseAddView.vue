@@ -223,26 +223,4 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
   border-radius: 20px;
   border: 1.5px solid var(--border);
   background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.type-chip.active {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-}
-
-.manage-panel { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; background: var(--bg-secondary); display: flex; flex-direction: column; gap: 6px; }
-.manage-row   { display: flex; gap: 6px; align-items: center; }
-.type-icon    { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
-.manage-input { flex: 1; font-size: 13px; padding: 6px 10px; }
-.icon-input   { width: 44px; flex-shrink: 0; text-align: center; font-size: 16px; padding: 6px 4px; }
-.manage-del { width: 30px; height: 30px; border-radius: var(--r-sm); background: none; border: 1px solid var(--border); color: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.manage-del:disabled { opacity: .3; cursor: not-allowed; }
-.manage-del svg { width: 13px; height: 13px; }
-.manage-add-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
-.reset-link { background: none; border: none; font-size: 11px; color: var(--text-tertiary); cursor: pointer; text-align: left; padding: 2px 0; text-decoration: underline; }
-</style>
+  col

@@ -250,22 +250,4 @@ async function confirmDelete(expense) {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;
 }
-.monthly-label {
-  font-size: 14px; font-weight: 700; color: var(--text-primary);
-  text-transform: capitalize;
-}
-.monthly-total { font-size: 16px; font-weight: 800; color: var(--text-primary); }
-
-.monthly-items { display: flex; flex-direction: column; gap: 0; }
-
-.monthly-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 0; border-top: 1px solid var(--border);
-  font-size: 13px;
-}
-.monthly-row:first-child { border-top: none; }
-.monthly-row-icon   { font-size: 15px; flex-shrink: 0; line-height: 1; }
-.monthly-row-cat    { font-weight: 600; flex-shrink: 0; }
-.monthly-row-desc   { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.monthly-row-amount { font-weight: 700; color: var(--text-primary); flex-shrink: 0; margin-left: auto; }
-</style>
+.mon
