@@ -854,4 +854,11 @@ export function useStorage() {
     addDeadline, updateDeadline, deleteDeadline, getDeadline,
     getDeadlinesByVehicle, getAllDeadlines,
     setTheme, getTheme, setDefaultVehicle, getDefaultVehicleId,
-    setConsumptionUnit, 
+    setConsumptionUnit, getConsumptionUnit, setSetting, getSetting,
+    addRecurringPayment, updateRecurringPayment, deleteRecurringPayment,
+    getRecurringPayment, getRecurringPaymentsByVehicle,
+    addAction, updateAction, deleteAction, getAction, getActionsByVehicle,
+    exportData, saveToFile, importData, hasData, clearAllData,
+    selectedVehicleId,
+  }
+}

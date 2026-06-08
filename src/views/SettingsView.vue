@@ -1445,4 +1445,4 @@ async function resetData() {
   font-size: 12px;
   color: var(--danger);
 }
-</style>  
+</style>
