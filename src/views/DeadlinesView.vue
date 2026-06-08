@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 
 const router = useRouter()
-const { data, dataReady, addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle, setDefaultVehicle, getDefaultVehicleId, getSetting, setSetting } = useStorage()
+const { data, selectedVehicleId, addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle, getSetting, setSetting } = useStorage()
 
 // ── Notifiche Push ────────────────────────────────────────────
 const notifEnabled = computed(() => getSetting('notificationsEnabled') ?? false)
@@ -43,17 +43,6 @@ function scheduleNotifiche() {
 }
 
 const vehicles = computed(() => data.value.vehicles)
-const selectedVehicleId = ref(null)
-
-watch(dataReady, (ready) => {
-  if (!ready) return
-  const defaultId = getDefaultVehicleId()
-  if (defaultId && vehicles.value.find(v => v.id === defaultId)) {
-    selectedVehicleId.value = defaultId
-  } else if (vehicles.value.length > 0) {
-    selectedVehicleId.value = vehicles.value[0].id
-  }
-}, { immediate: true })
 
 const deadlineTypes = [
   { value: 'assicurazione', label: 'Assicurazione', icon: '🛡️' },
@@ -104,10 +93,6 @@ function statusLabel(deadline) {
   return `${days} giorni`
 }
 
-function onVehicleChange(e) {
-  selectedVehicleId.value = e.target.value
-  setDefaultVehicle(e.target.value)
-}
 
 function openAddForm() {
   editingId.value = null
@@ -230,14 +215,6 @@ const canSave = computed(() => form.value.expiryDate && selectedVehicleId.value)
     <!-- List -->
     <template v-else>
       <!-- Vehicle selector -->
-      <div style="margin-bottom:12px">
-        <select class="form-select" :value="selectedVehicleId" @change="onVehicleChange">
-          <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
-          </option>
-        </select>
-      </div>
-
       <!-- Notifications toggle -->
       <div v-if="notifSupported" class="notif-bar" :class="{ enabled: notifEnabled }">
         <div class="notif-left">

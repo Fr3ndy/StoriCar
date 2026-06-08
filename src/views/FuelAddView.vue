@@ -9,10 +9,10 @@ const router = useRouter()
 const route = useRoute()
 const {
   data,
+  selectedVehicleId,
   addFuelRecord,
   updateFuelRecord,
   getFuelRecord,
-  getDefaultVehicleId,
   getLastFuelRecord,
   getPrevFuelRecord,
   getFuelRecordsByVehicle
@@ -34,9 +34,12 @@ const isEditing = computed(() => route.name === 'fuel-edit')
 const editId = computed(() => route.params.id)
 const vehicles = computed(() => data.value.vehicles)
 
+const nowTime = () => new Date().toTimeString().slice(0, 5)  // HH:MM
+
 const form = ref({
   vehicleId: '',
   date: new Date().toISOString().split('T')[0],
+  time: nowTime(),
   amount: '',
   liters: '',
   pricePerLiter: '',
@@ -45,8 +48,12 @@ const form = ref({
   fullTank: false,
   notes: '',
   location: null,
-  address: ''
+  address: '',
+  computerConsumption: ''
 })
+
+const consUnit = computed(() => data.value.settings?.consumptionUnit || 'kmL')
+const consUnitLabel = computed(() => consUnit.value === 'L100km' ? 'L/100km' : 'km/L')
 
 // Which field the user explicitly typed last: null | 'liters' | 'pricePerLiter'
 const lockedField = ref(null)
@@ -120,15 +127,17 @@ onMounted(async () => {
       form.value = {
         vehicleId: record.vehicleId,
         date: record.date,
+        time: record.time || '',
         amount: record.amount?.toString() || '',
         liters: record.liters?.toString() || '',
         pricePerLiter: record.pricePerLiter?.toString() || '',
         odometer: record.odometer?.toString() || '',
         remainingRange: record.remainingRange?.toString() || '',
-        fullTank: record.fullTank !== false, // default true per record vecchi
+        fullTank: record.fullTank !== false,
         notes: record.notes || '',
         location: record.location || null,
-        address: record.address || ''
+        address: record.address || '',
+        computerConsumption: record.computerConsumption?.toString() || ''
       }
       if (record.location) {
         position.value = record.location
@@ -138,9 +147,8 @@ onMounted(async () => {
       router.push('/fuel')
     }
   } else {
-    const defaultId = getDefaultVehicleId()
-    if (defaultId) {
-      form.value.vehicleId = defaultId
+    if (selectedVehicleId.value) {
+      form.value.vehicleId = selectedVehicleId.value
     } else if (vehicles.value.length > 0) {
       form.value.vehicleId = vehicles.value[0].id
     }
@@ -223,6 +231,7 @@ async function save() {
   const recordData = {
     vehicleId: form.value.vehicleId,
     date: form.value.date,
+    time: form.value.time || null,
     amount: parseFloat(form.value.amount) || 0,
     liters: parseFloat(form.value.liters) || 0,
     pricePerLiter: parseFloat(form.value.pricePerLiter) || 0,
@@ -232,7 +241,8 @@ async function save() {
     fullTank: form.value.fullTank,
     notes: form.value.notes,
     location: form.value.location,
-    address: form.value.address
+    address: form.value.address,
+    computerConsumption: form.value.computerConsumption ? parseFloat(form.value.computerConsumption) : null
   }
   if (isEditing.value) {
     await updateFuelRecord(editId.value, recordData)
@@ -251,20 +261,16 @@ const canSave = computed(() =>
   <div class="view-container">
     <div class="card form-card">
 
-      <!-- Vehicle selector -->
-      <div class="form-group">
-        <label class="form-label">Veicolo *</label>
-        <select v-model="form.vehicleId" class="form-select">
-          <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.id === data.settings?.defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
-          </option>
-        </select>
-      </div>
-
-      <!-- Date -->
-      <div class="form-group">
-        <label class="form-label">Data *</label>
-        <input v-model="form.date" type="date" class="form-input" required />
+      <!-- Data e ora -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input v-model="form.date" type="date" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Orario</label>
+          <input v-model="form.time" type="time" class="form-input" />
+        </div>
       </div>
 
       <!-- Section: Km -->
@@ -344,6 +350,19 @@ const canSave = computed(() =>
           </span>
           <span v-else class="km-placeholder">Inserisci contakm</span>
         </div>
+      </div>
+
+      <!-- Consumo computer di bordo -->
+      <div class="form-group">
+        <label class="form-label">Consumo computer di bordo <span class="form-opt">({{ consUnitLabel }})</span></label>
+        <input
+          v-model="form.computerConsumption"
+          type="number"
+          class="form-input"
+          placeholder="es. 7,3"
+          min="0"
+          step="0.1"
+        />
       </div>
 
       <!-- Section: Carburante -->
@@ -846,4 +865,5 @@ textarea.form-input {
   transition: transform 0.2s;
 }
 .ft-switch.active .ft-thumb { transform: translateX(18px); }
+.form-opt { font-weight: 400; color: var(--text-tertiary); font-size: 11px; }
 </style>

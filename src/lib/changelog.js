@@ -73,6 +73,4 @@ export const changelog = [
       { type: 'fixed', text: 'Risolti numerosi bug minori' },
     ]
   },
-  {
-    version: '1.0.0',
-    date:
+]

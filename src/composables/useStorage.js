@@ -24,6 +24,8 @@ const defaultSettings = {
   avatarUrl: null,
   isPublic: false,
   notificationsEnabled: false,
+  customCategories: [],   // { value, label } array di categorie personalizzate
+  customActionTypes: [],  // { value, label, icon } tipi azione personalizzati
 }
 
 const emptyData = () => ({
@@ -32,13 +34,15 @@ const emptyData = () => ({
   expenses: [],
   deadlines: [],
   recurringPayments: [],
+  actions: [],
   settings: { ...defaultSettings }
 })
 
 // Stato singleton
-const data         = ref(emptyData())
-const dataReady    = ref(false)
-let   loadingPromise = null
+const data               = ref(emptyData())
+const dataReady          = ref(false)
+const selectedVehicleId  = ref(null)   // veicolo attivo globale (usato da tutta l'app)
+let   loadingPromise     = null
 
 // ── Helpers localStorage (guest mode) ────────────────────────
 const LOCAL_DATA_KEY = 'storicar_local_data'
@@ -73,15 +77,18 @@ function mapVehicle(r) {
     id: r.id, name: r.name, vehicleType: r.vehicle_type, plate: r.plate,
     brand: r.brand, model: r.model, year: r.year, fuelType: r.fuel_type,
     initialOdometer: r.initial_odometer,
+    declaredConsumption: r.declared_consumption ?? null,
     coverImageUrl: r.cover_image_url ?? null
   }
 }
 function mapFuelRecord(r) {
   return {
-    id: r.id, vehicleId: r.vehicle_id, date: r.date, amount: r.amount,
+    id: r.id, vehicleId: r.vehicle_id, date: r.date, time: r.time ?? null,
+    amount: r.amount,
     liters: r.liters, pricePerLiter: r.price_per_liter, kmDriven: r.km_driven,
     odometer: r.odometer, remainingRange: r.remaining_range,
-    fullTank: r.full_tank !== false, // default true se colonna assente/null
+    fullTank: r.full_tank !== false,
+    computerConsumption: r.computer_consumption ?? null,
     notes: r.notes,
     location: r.location ? JSON.parse(r.location) : null, address: r.address
   }
@@ -404,6 +411,7 @@ export function useStorage() {
     if ('year'            in updates) db.year             = updates.year
     if ('fuelType'        in updates) db.fuel_type        = updates.fuelType
     if ('initialOdometer' in updates) db.initial_odometer = updates.initialOdometer
+    if ('declaredConsumption' in updates) db.declared_consumption = updates.declaredConsumption ?? null
     if ('coverImageUrl'   in updates) db.cover_image_url  = updates.coverImageUrl ?? null
     const { error } = await supabase.from('vehicles').update(db).eq('id', id)
     if (error) throw error
@@ -449,6 +457,7 @@ export function useStorage() {
         user_id:         user.value.id,
         vehicle_id:      record.vehicleId,
         date:            record.date,
+        time:            record.time ?? null,
         amount:          record.amount,
         liters:          record.liters,
         price_per_liter: record.pricePerLiter,
@@ -456,6 +465,7 @@ export function useStorage() {
         odometer:        record.odometer,
         remaining_range: record.remainingRange,
         full_tank:       record.fullTank !== false,
+        computer_consumption: record.computerConsumption ?? null,
         notes:           record.notes,
         location:        record.location ? JSON.stringify(record.location) : null,
         address:         record.address
@@ -476,6 +486,7 @@ export function useStorage() {
     }
     const db = {}
     if ('date'           in updates) db.date            = updates.date
+    if ('time'           in updates) db.time            = updates.time ?? null
     if ('amount'         in updates) db.amount          = updates.amount
     if ('liters'         in updates) db.liters          = updates.liters
     if ('pricePerLiter'  in updates) db.price_per_liter = updates.pricePerLiter
@@ -483,6 +494,7 @@ export function useStorage() {
     if ('odometer'       in updates) db.odometer        = updates.odometer
     if ('remainingRange' in updates) db.remaining_range = updates.remainingRange
     if ('fullTank'       in updates) db.full_tank       = updates.fullTank !== false
+    if ('computerConsumption' in updates) db.computer_consumption = updates.computerConsumption ?? null
     if ('notes'          in updates) db.notes           = updates.notes
     if ('location'       in updates) db.location        = updates.location ? JSON.stringify(updates.location) : null
     if ('address'        in updates) db.address         = updates.address
@@ -712,6 +724,35 @@ export function useStorage() {
   function getRecurringPayment(id)                  { return data.value.recurringPayments.find(p => p.id === id) }
   function getRecurringPaymentsByVehicle(vehicleId) { return data.value.recurringPayments.filter(p => p.vehicleId === vehicleId) }
 
+  // ── Actions ───────────────────────────────────────────────────
+  function getActionsByVehicle(vehicleId) {
+    return (data.value.actions || [])
+      .filter(a => a.vehicleId === vehicleId)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+  }
+  function getAction(id) { return (data.value.actions || []).find(a => a.id === id) }
+
+  async function addAction(action) {
+    if (!data.value.actions) data.value.actions = []
+    const mapped = { ...action, id: localId() }
+    data.value.actions.unshift(mapped)
+    saveLocalData()
+    return mapped.id
+  }
+
+  async function updateAction(id, updates) {
+    if (!data.value.actions) return
+    const i = data.value.actions.findIndex(a => a.id === id)
+    if (i !== -1) data.value.actions[i] = { ...data.value.actions[i], ...updates }
+    saveLocalData()
+  }
+
+  async function deleteAction(id) {
+    if (!data.value.actions) return
+    data.value.actions = data.value.actions.filter(a => a.id !== id)
+    saveLocalData()
+  }
+
   // ── Settings ──────────────────────────────────────────────────
   async function setTheme(theme) {
     data.value.settings.theme = theme
@@ -793,6 +834,7 @@ export function useStorage() {
   return {
     data,
     dataReady,
+    selectedVehicleId,
     addVehicle, updateVehicle, deleteVehicle, getVehicle,
     addFuelRecord, updateFuelRecord, deleteFuelRecord, getFuelRecord,
     getFuelRecordsByVehicle, getLastFuelRecord, getPrevFuelRecord,
@@ -803,6 +845,8 @@ export function useStorage() {
     setConsumptionUnit, getConsumptionUnit, setSetting, getSetting,
     addRecurringPayment, updateRecurringPayment, deleteRecurringPayment,
     getRecurringPayment, getRecurringPaymentsByVehicle,
+    addAction, updateAction, deleteAction, getAction, getActionsByVehicle,
     exportData, saveToFile, importData, hasData, clearAllData,
+    selectedVehicleId,
   }
 }

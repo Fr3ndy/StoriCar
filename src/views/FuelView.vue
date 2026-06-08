@@ -1,12 +1,11 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 
 const router = useRouter()
-const { data, dataReady, getDefaultVehicleId, setDefaultVehicle, deleteFuelRecord } = useStorage()
+const { data, dataReady, selectedVehicleId, deleteFuelRecord } = useStorage()
 
-const selectedVehicleId = ref(null)
 const showFilters = ref(false)
 
 // Filters
@@ -15,8 +14,8 @@ const filterMonth = ref('')
 const filterText = ref('')
 
 const vehicles = computed(() => data.value.vehicles)
+const consUnitLabel = computed(() => (data.value.settings?.consumptionUnit || 'kmL') === 'L100km' ? 'L/100' : 'km/L')
 const hasVehicles = computed(() => vehicles.value.length > 0)
-const defaultVehicleId = computed(() => data.value.settings?.defaultVehicleId)
 
 const allRecords = computed(() => {
   if (!selectedVehicleId.value) return []
@@ -66,20 +65,6 @@ const months = [
   { value: '11', label: 'Novembre' }, { value: '12', label: 'Dicembre' }
 ]
 
-watch(dataReady, (ready) => {
-  if (!ready) return
-  const defaultId = getDefaultVehicleId()
-  if (defaultId && vehicles.value.find(v => v.id === defaultId)) {
-    selectedVehicleId.value = defaultId
-  } else if (vehicles.value.length > 0) {
-    selectedVehicleId.value = vehicles.value[0].id
-  }
-}, { immediate: true })
-
-async function onVehicleChange(e) {
-  selectedVehicleId.value = e.target.value
-  await setDefaultVehicle(e.target.value)
-}
 
 function formatNumber(num, decimals = 2) {
   if (num == null) return '-'
@@ -120,13 +105,6 @@ function editRecord(record) {
     </div>
 
     <template v-else>
-      <!-- Vehicle selector -->
-      <select class="form-select" style="margin-bottom:10px" :value="selectedVehicleId" @change="onVehicleChange">
-        <option v-for="v in vehicles" :key="v.id" :value="v.id">
-          {{ v.id === defaultVehicleId ? '★ ' : '' }}{{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
-        </option>
-      </select>
-
       <!-- Filter bar -->
       <div class="filter-bar card">
         <button class="filter-toggle" @click="showFilters = !showFilters">
@@ -182,6 +160,7 @@ function editRecord(record) {
             <div class="tl-date">
               <span class="tl-day">{{ formatDay(record.date) }}</span>
               <span class="tl-month">{{ formatMonthShort(record.date) }}</span>
+              <span v-if="record.time" class="tl-time">{{ record.time }}</span>
             </div>
             <div v-if="index < fuelRecords.length - 1" class="tl-line"></div>
           </div>
@@ -202,6 +181,7 @@ function editRecord(record) {
               <span v-if="record.pricePerLiter" class="tc-chip">{{ formatNumber(record.pricePerLiter, 3) }} €/L</span>
               <span v-if="record.kmDriven" class="tc-chip">{{ Math.round(record.kmDriven).toLocaleString('it-IT') }} km</span>
               <span v-if="record.odometer" class="tc-chip tc-chip-muted">odo {{ Math.round(record.odometer).toLocaleString('it-IT') }}</span>
+              <span v-if="record.computerConsumption" class="tc-chip tc-chip-comp">{{ formatNumber(record.computerConsumption, 1) }} {{ consUnitLabel }}</span>
             </div>
 
             <!-- Location -->
@@ -297,9 +277,10 @@ function editRecord(record) {
   align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: var(--shadow-sm);
 }
-.tl-day   { font-size: 16px; font-weight: 800; line-height: 1; color: var(--primary); }
+.tl-day   { font-size: 16px; font-weight: 800; line-height: 1; color: var(--text-primary); }
 .tl-month { font-size: 9px; color: var(--text-secondary); text-transform: uppercase;
   letter-spacing: 0.3px; font-weight: 700; }
+.tl-time  { font-size: 8px; color: var(--text-tertiary); font-weight: 600; margin-top: 1px; }
 
 .tl-line {
   width: 1.5px; flex: 1; background: var(--border);
@@ -369,9 +350,6 @@ function editRecord(record) {
 .tc-action-btn:active { opacity: .8; }
 .tc-action-btn.danger {
   color: var(--danger);
-  background: rgba(239,68,68,0.06);
-  border-color: rgba(239,68,68,0.2);
-  padding: 5px 8px;
 }
-.tc-action-btn.danger:active { background: rgba(239,68,68,0.12); }
+.tc-action-btn.danger:active { background: rgba(239,68,68,0.08); }
 </style>

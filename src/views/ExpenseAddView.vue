@@ -1,18 +1,18 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
 
 const router = useRouter()
 const route = useRoute()
-const { data, addExpense, updateExpense, getExpense, getDefaultVehicleId } = useStorage()
+const { data, addExpense, updateExpense, getExpense, selectedVehicleId } = useStorage()
 
 const isEditing = computed(() => route.name === 'expenses-edit')
 const editId = computed(() => route.params.id)
 
 const vehicles = computed(() => data.value.vehicles)
 
-const categories = [
+const builtinCategories = [
   { value: 'maintenance', label: 'Manutenzione' },
   { value: 'insurance',   label: 'Assicurazione' },
   { value: 'tax',         label: 'Bollo' },
@@ -23,6 +23,11 @@ const categories = [
   { value: 'fine',        label: 'Multe' },
   { value: 'other',       label: 'Altro' }
 ]
+
+const categories = computed(() => [
+  ...builtinCategories,
+  ...(data.value.settings?.customCategories || [])
+])
 
 const form = ref({
   vehicleId: '',
@@ -49,9 +54,8 @@ onMounted(() => {
       router.push('/expenses')
     }
   } else {
-    const defaultId = getDefaultVehicleId()
-    if (defaultId) {
-      form.value.vehicleId = defaultId
+    if (selectedVehicleId.value) {
+      form.value.vehicleId = selectedVehicleId.value
     } else if (vehicles.value.length > 0) {
       form.value.vehicleId = vehicles.value[0].id
     }
@@ -81,15 +85,6 @@ const canSave = computed(() => form.value.vehicleId && form.value.date && form.v
 <template>
   <div class="view-container">
     <div class="card form-card">
-
-      <div class="form-group">
-        <label class="form-label">Veicolo *</label>
-        <select v-model="form.vehicleId" class="form-select">
-          <option v-for="v in vehicles" :key="v.id" :value="v.id">
-            {{ v.name }}{{ v.plate ? ` (${v.plate})` : '' }}
-          </option>
-        </select>
-      </div>
 
       <div class="form-row">
         <div class="form-group">
