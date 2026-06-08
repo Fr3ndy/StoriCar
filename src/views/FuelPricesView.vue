@@ -199,8 +199,8 @@ const FUEL_FAMILIES = {
   'Gasolio': ['Gasolio', 'Blue Diesel', 'HVOlution', 'HVO', 'Gasolio Premium', 'Supreme Diesel', 'Hi-Q Diesel'],
   'Metano':  ['Metano'],
   'GPL':     ['GPL'],
-  'L-GNC':   ['L-GNC'],
-  'GNL':     ['GNL'],
+  // 'L-GNC':   ['L-GNC'],
+  // 'GNL':     ['GNL'],
 }
 
 const FUEL_ICONS = {
@@ -208,8 +208,8 @@ const FUEL_ICONS = {
   'Gasolio': '🛢️',
   'Metano':  '💨',
   'GPL':     '🔵',
-  'L-GNC':   '🌿',
-  'GNL':     '❄️',
+  // 'L-GNC':   '🌿',
+  // 'GNL':     '❄️',
 }
 
 // ── Computed ──────────────────────────────────────────────────────────────────
