@@ -498,6 +498,9 @@ export function useStorage() {
       .select().single()
     if (error) throw error
     const mapped = mapFuelRecord(row)
+    // Se la colonna date su Supabase è di tipo DATE, il timestamp viene troncato
+    // e mapFuelRecord non riesce a estrarre l'orario: lo preserviamo dall'originale
+    if (!mapped.time && record.time) mapped.time = record.time
     data.value.fuelRecords.unshift(mapped)
     return mapped.id
   }
@@ -510,10 +513,11 @@ export function useStorage() {
       return
     }
     const db = {}
+    let resolvedTime = null
     if ('date' in updates || 'time' in updates) {
       const d = updates.date ?? data.value.fuelRecords.find(r => r.id === id)?.date ?? ''
-      const t = updates.time ?? data.value.fuelRecords.find(r => r.id === id)?.time ?? null
-      db.date = t ? `${d}T${t}` : d
+      resolvedTime = updates.time ?? data.value.fuelRecords.find(r => r.id === id)?.time ?? null
+      db.date = resolvedTime ? `${d}T${resolvedTime}` : d
     }
     if ('amount'         in updates) db.amount          = updates.amount
     if ('liters'         in updates) db.liters          = updates.liters
@@ -529,7 +533,15 @@ export function useStorage() {
     const { error } = await supabase.from('fuel_records').update(db).eq('id', id)
     if (error) throw error
     const i = data.value.fuelRecords.findIndex(r => r.id === id)
-    if (i !== -1) data.value.fuelRecords[i] = { ...data.value.fuelRecords[i], ...updates }
+    if (i !== -1) {
+      // Usa il time risolto (non null se esisteva già) per aggiornare lo stato locale,
+      // evitando che updates.time = null sovrascriva un orario valido già salvato su DB
+      const localUpdates = { ...updates }
+      if ('date' in updates || 'time' in updates) {
+        localUpdates.time = resolvedTime
+      }
+      data.value.fuelRecords[i] = { ...data.value.fuelRecords[i], ...localUpdates }
+    }
   }
 
   async function deleteFuelRecord(id) {
