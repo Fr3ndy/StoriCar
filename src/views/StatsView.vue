@@ -24,7 +24,7 @@ ChartJS.register(
 )
 
 const router = useRouter()
-const { data, selectedVehicleId } = useStorage()
+const { data, selectedVehicleId, getRecurringPaymentsByVehicle } = useStorage()
 
 const vehicles = computed(() => data.value.vehicles)
 const hasVehicles = computed(() => vehicles.value.length > 0)
@@ -294,6 +294,27 @@ const dayOfWeekChartData = computed(() => ({
 }))
 
 const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
+
+// ── Spese ricorrenti ──
+const RP_FREQUENCIES = {
+  monthly:    { label: 'Mensile',     months: 1  },
+  quarterly:  { label: 'Trimestrale', months: 3  },
+  semiannual: { label: 'Semestrale',  months: 6  },
+  annual:     { label: 'Annuale',     months: 12 },
+}
+function rpFreqLabel(v)  { return RP_FREQUENCIES[v]?.label || v }
+function rpFreqMonths(v) { return RP_FREQUENCIES[v]?.months || 1 }
+
+const recurringPayments = computed(() => {
+  if (!selectedVehicleId.value) return []
+  return getRecurringPaymentsByVehicle(selectedVehicleId.value)
+    .slice()
+    .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate))
+})
+const recurringMonthlyTotal = computed(() =>
+  recurringPayments.value.reduce((sum, rp) => sum + (rp.amount || 0) / rpFreqMonths(rp.frequency), 0)
+)
+const recurringAnnualTotal = computed(() => recurringMonthlyTotal.value * 12)
 </script>
 
 <template>
@@ -488,6 +509,52 @@ const monthNames = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott',
             <span class="row-left">Altre spese/anno</span>
             <strong>{{ fmtEur(stats.annualForecast.value?.other) }}</strong>
           </div>
+        </div>
+      </div>
+
+      <!-- ── SEZIONE: Spese ricorrenti ── -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon section-icon-purple">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+          <h2 class="section-title">Spese ricorrenti</h2>
+        </div>
+
+        <template v-if="recurringPayments.length > 0">
+          <div class="kpi-row">
+            <div class="kpi-box">
+              <div class="kpi-val">{{ recurringPayments.length }}</div>
+              <div class="kpi-lbl">Attive</div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-val">{{ fmtEur(recurringMonthlyTotal) }}</div>
+              <div class="kpi-lbl">Stima/mese</div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-val">{{ fmtEur(recurringAnnualTotal) }}</div>
+              <div class="kpi-lbl">Stima/anno</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div v-for="rp in recurringPayments" :key="rp.id" class="row-item">
+              <div class="row-left">
+                <span>{{ rp.name }}</span>
+                <span class="muted small">{{ rpFreqLabel(rp.frequency) }} · prossima {{ fmtDate(rp.nextDate) }}</span>
+              </div>
+              <div class="row-right">
+                <span class="muted">{{ fmtEur(rp.amount / rpFreqMonths(rp.frequency)) }}/mese</span>
+                <strong>{{ fmtEur(rp.amount) }}</strong>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div class="empty-section" v-else>
+          <p>Nessuna spesa ricorrente configurata</p>
         </div>
       </div>
 

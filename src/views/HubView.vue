@@ -178,18 +178,51 @@ async function saveRp() {
 async function confirmDeleteRp(rp) {
   if (confirm(`Eliminare la spesa ricorrente "${rp.name}"?`)) await deleteRecurringPayment(rp.id)
 }
-// Registra la spesa nell'elenco Spese e sposta la ricorrenza alla scadenza successiva
+
+// Quante scadenze passate (incluso oggi) non sono ancora state registrate come spesa.
+// Utile per chi imposta una ricorrenza già in corso da mesi (es. rata partita a dicembre):
+// permette di recuperare in un colpo solo tutti i pagamenti arretrati.
+function rpOverdueCount(rp) {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  let cursor = rp.nextDate
+  let count = 0
+  while (cursor <= todayStr && count < 240) { // limite di sicurezza: 20 anni di mensilità
+    count++
+    cursor = addMonthsToDateStr(cursor, freqMonths(rp.frequency))
+  }
+  return count
+}
+
+// Registra la spesa nell'elenco Spese e sposta la ricorrenza alla scadenza successiva.
+// Se ci sono più scadenze arretrate non ancora registrate, le genera tutte in un colpo solo
+// (una spesa per ogni periodo, dalla prima scadenza non pagata fino a oggi).
 async function markRecurringPaid(rp) {
-  await addExpense({
-    vehicleId:   rp.vehicleId,
-    date:        rp.nextDate,
-    category:    rp.category,
-    amount:      rp.amount,
-    description: rp.name,
-    notes:       rp.notes || ''
-  })
-  const newNextDate = addMonthsToDateStr(rp.nextDate, freqMonths(rp.frequency))
-  await updateRecurringPayment(rp.id, { nextDate: newNextDate })
+  const overdue = rpOverdueCount(rp)
+  if (overdue > 1) {
+    const total = (rp.amount || 0) * overdue
+    const ok = confirm(
+      `Risultano ${overdue} scadenze non ancora registrate per "${rp.name}" ` +
+      `(dal ${formatDate(rp.nextDate)} a oggi), per un totale di € ${fmt(total)}.\n\n` +
+      `Vuoi registrarle tutte come spese?`
+    )
+    if (!ok) return
+  }
+  const todayStr = new Date().toISOString().slice(0, 10)
+  let cursor = rp.nextDate
+  let i = 0
+  while (cursor <= todayStr && i < overdue) {
+    await addExpense({
+      vehicleId:   rp.vehicleId,
+      date:        cursor,
+      category:    rp.category,
+      amount:      rp.amount,
+      description: rp.name,
+      notes:       rp.notes || ''
+    })
+    cursor = addMonthsToDateStr(cursor, freqMonths(rp.frequency))
+    i++
+  }
+  await updateRecurringPayment(rp.id, { nextDate: cursor })
 }
 
 // ── Azioni ────────────────────────────────────────────────────
@@ -470,6 +503,9 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
               <input v-model="rpForm.nextDate" type="date" class="form-input" />
             </div>
           </div>
+          <p class="rp-hint">
+            Se paghi già questa rata da tempo (es. da dicembre), inserisci qui la data del <strong>primo</strong> pagamento non ancora registrato: al salvataggio potrai generare in un colpo solo tutte le spese arretrate fino ad oggi.
+          </p>
 
           <div class="form-group">
             <label class="form-label">Frequenza</label>
@@ -518,7 +554,7 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
               </div>
               <div class="recurring-actions">
                 <button v-if="rpStatus(rp) !== 'ok'" class="btn btn-sm btn-primary rp-pay-btn" @click="markRecurringPaid(rp)">
-                  ✓ Segna come pagata
+                  {{ rpOverdueCount(rp) > 1 ? `✓ Segna ${rpOverdueCount(rp)} pagamenti arretrati` : '✓ Segna come pagata' }}
                 </button>
                 <button class="ic-btn" @click="openEditRp(rp)">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
@@ -885,6 +921,17 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
   margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
 }
 .rp-pay-btn { flex: 1; }
+
+.rp-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  margin: -6px 0 14px;
+}
 
 .section-divider { height: 1px; background: var(--border); margin: 4px 0 16px; }
 
