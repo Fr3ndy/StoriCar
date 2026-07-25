@@ -8,7 +8,7 @@ import { useRegisterSW } from 'virtual:pwa-register/vue'
 
 const router = useRouter()
 const route  = useRoute()
-const { getTheme, setTheme, data, dataReady, selectedVehicleId, setDefaultVehicle } = useStorage()
+const { getTheme, setTheme, data, dataReady, selectedVehicleId, setDefaultVehicle, initAccentColor } = useStorage()
 const { user, signOut } = useAuth()
 const { checkDeadlines } = useNotifications()
 
@@ -111,6 +111,7 @@ async function onHeaderVehicleChange(id) {
 
 onMounted(() => {
   setTheme(getTheme())
+  initAccentColor()
 
   watch(dataReady, (ready) => {
     if (!ready) return
