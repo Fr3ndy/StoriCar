@@ -9,6 +9,24 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/).
 
 ---
 
+## [1.5.0] — 2026-07-25 📅 Calendario, spese ricorrenti e personalizzazione
+
+### Aggiunto
+- **Esportazione scadenze verso calendario:** link diretto "Aggiungi a Google Calendar" o download file .ics (standard, importabile in qualsiasi app calendario), per singola scadenza o in blocco per tutte le scadenze del veicolo
+- **Spese ricorrenti:** nuova sezione nella tab Spese per gestire rate, abbonamenti e assicurazioni periodiche (mensile/trimestrale/semestrale/annuale), con promemoria di scadenza e conferma manuale del pagamento
+- **Recupero pagamenti arretrati:** se una spesa ricorrente è attiva da tempo (es. una rata partita mesi fa), un tap genera automaticamente tutte le spese mancanti fino ad oggi e riallinea la prossima scadenza
+- **Spese ricorrenti nelle Statistiche:** nuova sezione con numero di ricorrenze attive, stima di spesa mensile e annua, ed elenco con prossima scadenza
+- **Colore d'accento personalizzabile** dalle Impostazioni → Aspetto (preset o colore libero), salvato solo sul dispositivo
+
+### Migliorato
+- **Selettore veicolo in topbar:** sostituite le pillole con un pulsante singolo che mostra sempre il nome del veicolo selezionato; il cambio veicolo avviene da un bottom sheet dedicato, più leggibile anche con molti veicoli
+- **Titolo di pagina** sempre visibile in testata insieme al veicolo selezionato, anche scorrendo il contenuto
+
+### Corretto
+- Eliminando un veicolo vengono ora rimosse correttamente anche le sue spese ricorrenti associate (in precedenza restavano orfane in memoria)
+
+---
+
 ## [1.4.0] — 2026-04-02 🔧 Fix prezzi carburante, validazione coordinate, consumo
 
 ### Aggiunto
@@ -87,5 +105,6 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/).
 
 ---
 
+[1.5.0]: https://github.com/Fr3ndy/StoriCar/releases/tag/v1.5.0
 [1.2.0]: https://github.com/Fr3ndy/StoriCar/releases/tag/v1.2.0
 [1.0.0]: https://github.com/Fr3ndy/StoriCar/releases/tag/v1.0.0
