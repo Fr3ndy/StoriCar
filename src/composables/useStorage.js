@@ -431,10 +431,11 @@ export function useStorage() {
 
   async function deleteVehicle(id) {
     if (isGuest.value) {
-      data.value.vehicles    = data.value.vehicles.filter(v => v.id !== id)
-      data.value.fuelRecords = data.value.fuelRecords.filter(r => r.vehicleId !== id)
-      data.value.expenses    = data.value.expenses.filter(e => e.vehicleId !== id)
-      data.value.deadlines   = data.value.deadlines.filter(d => d.vehicleId !== id)
+      data.value.vehicles          = data.value.vehicles.filter(v => v.id !== id)
+      data.value.fuelRecords       = data.value.fuelRecords.filter(r => r.vehicleId !== id)
+      data.value.expenses          = data.value.expenses.filter(e => e.vehicleId !== id)
+      data.value.deadlines         = data.value.deadlines.filter(d => d.vehicleId !== id)
+      data.value.recurringPayments = data.value.recurringPayments.filter(p => p.vehicleId !== id)
       if (data.value.settings.defaultVehicleId === id)
         data.value.settings.defaultVehicleId = data.value.vehicles[0]?.id || null
       saveLocalData()
@@ -442,10 +443,11 @@ export function useStorage() {
     }
     const { error } = await supabase.from('vehicles').delete().eq('id', id)
     if (error) throw error
-    data.value.vehicles    = data.value.vehicles.filter(v => v.id !== id)
-    data.value.fuelRecords = data.value.fuelRecords.filter(r => r.vehicleId !== id)
-    data.value.expenses    = data.value.expenses.filter(e => e.vehicleId !== id)
-    data.value.deadlines   = data.value.deadlines.filter(d => d.vehicleId !== id)
+    data.value.vehicles          = data.value.vehicles.filter(v => v.id !== id)
+    data.value.fuelRecords       = data.value.fuelRecords.filter(r => r.vehicleId !== id)
+    data.value.expenses          = data.value.expenses.filter(e => e.vehicleId !== id)
+    data.value.deadlines         = data.value.deadlines.filter(d => d.vehicleId !== id)
+    data.value.recurringPayments = data.value.recurringPayments.filter(p => p.vehicleId !== id)
     if (data.value.settings.defaultVehicleId === id) {
       data.value.settings.defaultVehicleId = data.value.vehicles[0]?.id || null
       await persistSettings(data.value.settings)
