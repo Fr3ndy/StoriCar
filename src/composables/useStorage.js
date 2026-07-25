@@ -46,6 +46,51 @@ const dataReady          = ref(false)
 const selectedVehicleId  = ref(null)   // veicolo attivo globale (usato da tutta l'app)
 let   loadingPromise     = null
 
+// ── Colore d'accento ──────────────────────────────────────────
+// Preferenza di sola visualizzazione: salvata SOLO in localStorage del
+// dispositivo (non su Supabase), quindi non sincronizzata tra dispositivi.
+const ACCENT_KEY     = 'storicar_accent_color'
+const DEFAULT_ACCENT = '#2563eb' // blu elettrico
+
+function hexToRgbArr(hex) {
+  const clean = (hex || '').replace('#', '')
+  const full  = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean
+  const num   = parseInt(full, 16)
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255]
+}
+function mixWith(hex, target, amount) {
+  const [r, g, b]    = hexToRgbArr(hex)
+  const [tr, tg, tb] = target
+  const ch = (c, t) => Math.round(c + (t - c) * amount)
+  return `rgb(${ch(r, tr)}, ${ch(g, tg)}, ${ch(b, tb)})`
+}
+function rgbaOf(hex, alpha) {
+  const [r, g, b] = hexToRgbArr(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function applyAccentColor(hex) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement.style
+  root.setProperty('--primary',       hex)
+  root.setProperty('--primary-dark',  mixWith(hex, [0, 0, 0], 0.18))
+  root.setProperty('--primary-light', mixWith(hex, [255, 255, 255], 0.25))
+  root.setProperty('--primary-soft',  rgbaOf(hex, 0.12))
+  root.setProperty('--primary-glow',  rgbaOf(hex, 0.15))
+  root.setProperty('--border-focus',  hex)
+}
+
+function getAccentColor() {
+  try { return localStorage.getItem(ACCENT_KEY) || DEFAULT_ACCENT } catch { return DEFAULT_ACCENT }
+}
+function setAccentColor(hex) {
+  try { localStorage.setItem(ACCENT_KEY, hex) } catch {}
+  applyAccentColor(hex)
+}
+function initAccentColor() {
+  applyAccentColor(getAccentColor())
+}
+
 // ── Helpers localStorage (guest mode) ────────────────────────
 const LOCAL_DATA_KEY = 'storicar_local_data'
 
@@ -447,10 +492,11 @@ export function useStorage() {
 
   async function deleteVehicle(id) {
     if (isGuest.value) {
-      data.value.vehicles    = data.value.vehicles.filter(v => v.id !== id)
-      data.value.fuelRecords = data.value.fuelRecords.filter(r => r.vehicleId !== id)
-      data.value.expenses    = data.value.expenses.filter(e => e.vehicleId !== id)
-      data.value.deadlines   = data.value.deadlines.filter(d => d.vehicleId !== id)
+      data.value.vehicles          = data.value.vehicles.filter(v => v.id !== id)
+      data.value.fuelRecords       = data.value.fuelRecords.filter(r => r.vehicleId !== id)
+      data.value.expenses          = data.value.expenses.filter(e => e.vehicleId !== id)
+      data.value.deadlines         = data.value.deadlines.filter(d => d.vehicleId !== id)
+      data.value.recurringPayments = data.value.recurringPayments.filter(p => p.vehicleId !== id)
       if (data.value.settings.defaultVehicleId === id)
         data.value.settings.defaultVehicleId = data.value.vehicles[0]?.id || null
       saveLocalData()
@@ -458,10 +504,11 @@ export function useStorage() {
     }
     const { error } = await supabase.from('vehicles').delete().eq('id', id)
     if (error) throw error
-    data.value.vehicles    = data.value.vehicles.filter(v => v.id !== id)
-    data.value.fuelRecords = data.value.fuelRecords.filter(r => r.vehicleId !== id)
-    data.value.expenses    = data.value.expenses.filter(e => e.vehicleId !== id)
-    data.value.deadlines   = data.value.deadlines.filter(d => d.vehicleId !== id)
+    data.value.vehicles          = data.value.vehicles.filter(v => v.id !== id)
+    data.value.fuelRecords       = data.value.fuelRecords.filter(r => r.vehicleId !== id)
+    data.value.expenses          = data.value.expenses.filter(e => e.vehicleId !== id)
+    data.value.deadlines         = data.value.deadlines.filter(d => d.vehicleId !== id)
+    data.value.recurringPayments = data.value.recurringPayments.filter(p => p.vehicleId !== id)
     if (data.value.settings.defaultVehicleId === id) {
       data.value.settings.defaultVehicleId = data.value.vehicles[0]?.id || null
       await persistSettings(data.value.settings)
@@ -885,6 +932,7 @@ export function useStorage() {
     getDeadlinesByVehicle, getAllDeadlines,
     setTheme, getTheme, setDefaultVehicle, getDefaultVehicleId,
     setConsumptionUnit, getConsumptionUnit, setSetting, getSetting,
+    getAccentColor, setAccentColor, initAccentColor, DEFAULT_ACCENT,
     addRecurringPayment, updateRecurringPayment, deleteRecurringPayment,
     getRecurringPayment, getRecurringPaymentsByVehicle,
     addAction, updateAction, deleteAction, getAction, getActionsByVehicle,

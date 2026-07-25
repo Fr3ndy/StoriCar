@@ -1,15 +1,18 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
+import { useCalendarExport } from '../composables/useCalendarExport'
 
 const router = useRouter()
 const {
   data, selectedVehicleId,
-  deleteExpense, deleteAction,
+  addExpense, deleteExpense, deleteAction,
   addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle,
+  addRecurringPayment, updateRecurringPayment, deleteRecurringPayment, getRecurringPaymentsByVehicle,
   getSetting, setSetting
 } = useStorage()
+const { openInGoogleCalendar, exportDeadlineIcs, exportDeadlinesIcs } = useCalendarExport()
 
 const activeTab = ref('spese') // spese | azioni | scadenze | timeline
 
@@ -75,6 +78,152 @@ const expenses = computed(() => {
     .filter(e => e.vehicleId === selectedVehicleId.value)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { value: 'maintenance', label: 'Manutenzione', icon: '🔧' },
+  { value: 'insurance',   label: 'Assicurazione', icon: '🛡️' },
+  { value: 'tax',         label: 'Bollo',          icon: '📄' },
+  { value: 'tires',       label: 'Gomme',          icon: '🔩' },
+  { value: 'wash',        label: 'Lavaggio',       icon: '🚿' },
+  { value: 'parking',     label: 'Parcheggio',     icon: '🅿️' },
+  { value: 'toll',        label: 'Pedaggi',        icon: '🛣️' },
+  { value: 'fine',        label: 'Multe',          icon: '⚠️' },
+  { value: 'other',       label: 'Altro',          icon: '📋' }
+]
+// Stessa lista gestibile usata nel form "Nuova spesa" (impostazioni condivise)
+const expenseCategoryOptions = computed(() =>
+  (data.value.settings?.allExpenseCategories?.length > 0)
+    ? data.value.settings.allExpenseCategories
+    : DEFAULT_EXPENSE_CATEGORIES
+)
+
+// ── Spese ricorrenti ─────────────────────────────────────────
+const FREQUENCIES = [
+  { value: 'monthly',    label: 'Mensile',     months: 1  },
+  { value: 'quarterly',  label: 'Trimestrale', months: 3  },
+  { value: 'semiannual', label: 'Semestrale',  months: 6  },
+  { value: 'annual',     label: 'Annuale',     months: 12 },
+]
+function freqLabel(v)  { return FREQUENCIES.find(f => f.value === v)?.label || v }
+function freqMonths(v) { return FREQUENCIES.find(f => f.value === v)?.months || 1 }
+
+// Aggiunge N mesi a una data 'YYYY-MM-DD' gestendo la lunghezza dei mesi (es. 31 gen + 1 mese = 28/29 feb)
+function addMonthsToDateStr(dateStr, months) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const total = (m - 1) + months
+  const newY  = y + Math.floor(total / 12)
+  const newM0 = ((total % 12) + 12) % 12
+  const lastDay = new Date(newY, newM0 + 1, 0).getDate()
+  const newD = Math.min(d, lastDay)
+  return `${newY}-${String(newM0 + 1).padStart(2, '0')}-${String(newD).padStart(2, '0')}`
+}
+
+const recurringPayments = computed(() => {
+  if (!selectedVehicleId.value) return []
+  return getRecurringPaymentsByVehicle(selectedVehicleId.value)
+    .slice()
+    .sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate))
+})
+
+function rpStatus(rp) {
+  const d = daysUntil(rp.nextDate)
+  return d < 0 ? 'expired' : d <= 7 ? 'expiring' : 'ok'
+}
+function rpLabel(rp) {
+  const d = daysUntil(rp.nextDate)
+  if (d < 0) return `Scaduta ${Math.abs(d)}gg fa`
+  if (d === 0) return 'Scade oggi'
+  return `tra ${d} giorni`
+}
+
+const showRpForm  = ref(false)
+const editingRpId = ref(null)
+const rpForm = ref({ name: '', category: 'other', amount: '', frequency: 'monthly', nextDate: '', notes: '' })
+
+function openAddRp() {
+  editingRpId.value = null
+  rpForm.value = {
+    name: '', category: expenseCategoryOptions.value[0]?.value || 'other',
+    amount: '', frequency: 'monthly',
+    nextDate: new Date().toISOString().slice(0, 10), notes: ''
+  }
+  showRpForm.value = true
+}
+function openEditRp(rp) {
+  editingRpId.value = rp.id
+  rpForm.value = {
+    name: rp.name || '', category: rp.category || 'other',
+    amount: rp.amount ?? '', frequency: rp.frequency || 'monthly',
+    nextDate: rp.nextDate, notes: rp.notes || ''
+  }
+  showRpForm.value = true
+}
+async function saveRp() {
+  const payload = {
+    vehicleId: selectedVehicleId.value,
+    name:      rpForm.value.name.trim(),
+    category:  rpForm.value.category,
+    amount:    rpForm.value.amount !== '' ? parseFloat(rpForm.value.amount) : null,
+    frequency: rpForm.value.frequency,
+    nextDate:  rpForm.value.nextDate,
+    notes:     rpForm.value.notes
+  }
+  if (editingRpId.value) {
+    await updateRecurringPayment(editingRpId.value, payload)
+  } else {
+    await addRecurringPayment({ ...payload, startDate: rpForm.value.nextDate })
+  }
+  showRpForm.value = false
+}
+async function confirmDeleteRp(rp) {
+  if (confirm(`Eliminare la spesa ricorrente "${rp.name}"?`)) await deleteRecurringPayment(rp.id)
+}
+
+// Quante scadenze passate (incluso oggi) non sono ancora state registrate come spesa.
+// Utile per chi imposta una ricorrenza già in corso da mesi (es. rata partita a dicembre):
+// permette di recuperare in un colpo solo tutti i pagamenti arretrati.
+function rpOverdueCount(rp) {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  let cursor = rp.nextDate
+  let count = 0
+  while (cursor <= todayStr && count < 240) { // limite di sicurezza: 20 anni di mensilità
+    count++
+    cursor = addMonthsToDateStr(cursor, freqMonths(rp.frequency))
+  }
+  return count
+}
+
+// Registra la spesa nell'elenco Spese e sposta la ricorrenza alla scadenza successiva.
+// Se ci sono più scadenze arretrate non ancora registrate, le genera tutte in un colpo solo
+// (una spesa per ogni periodo, dalla prima scadenza non pagata fino a oggi).
+async function markRecurringPaid(rp) {
+  const overdue = rpOverdueCount(rp)
+  if (overdue > 1) {
+    const total = (rp.amount || 0) * overdue
+    const ok = confirm(
+      `Risultano ${overdue} scadenze non ancora registrate per "${rp.name}" ` +
+      `(dal ${formatDate(rp.nextDate)} a oggi), per un totale di € ${fmt(total)}.\n\n` +
+      `Vuoi registrarle tutte come spese?`
+    )
+    if (!ok) return
+  }
+  const todayStr = new Date().toISOString().slice(0, 10)
+  let cursor = rp.nextDate
+  let i = 0
+  while (cursor <= todayStr && i < overdue) {
+    await addExpense({
+      vehicleId:   rp.vehicleId,
+      date:        cursor,
+      category:    rp.category,
+      amount:      rp.amount,
+      description: rp.name,
+      notes:       rp.notes || ''
+    })
+    cursor = addMonthsToDateStr(cursor, freqMonths(rp.frequency))
+    i++
+  }
+  await updateRecurringPayment(rp.id, { nextDate: cursor })
+}
 
 // ── Azioni ────────────────────────────────────────────────────
 const actions = computed(() => {
@@ -176,6 +325,38 @@ async function resetDlTypes() {
 const showDlForm  = ref(false)
 const editingDlId = ref(null)
 const dlForm = ref({ type: 'assicurazione', description: '', expiryDate: '', amount: '', reminderDays: 30, notes: '' })
+
+// ── Export calendario (Google Calendar / .ics) ─────────────────
+const openCalMenu = ref(null) // id della scadenza con il menu aperto
+
+function currentVehicleName() {
+  return vehicles.value.find(v => v.id === selectedVehicleId.value)?.name || ''
+}
+function toggleCalMenu(id) {
+  openCalMenu.value = openCalMenu.value === id ? null : id
+}
+function closeCalMenu() {
+  openCalMenu.value = null
+}
+function addDlToGoogle(dl) {
+  openInGoogleCalendar(dl, getDlType(dl.type).label, currentVehicleName())
+  closeCalMenu()
+}
+function downloadDlIcs(dl) {
+  exportDeadlineIcs(dl, getDlType(dl.type).label, currentVehicleName())
+  closeCalMenu()
+}
+function exportAllDeadlinesIcs() {
+  const vehicleName = currentVehicleName()
+  const items = deadlines.value.map(dl => ({ dl, typeLabel: getDlType(dl.type).label, vehicleName }))
+  if (!items.length) return
+  exportDeadlinesIcs(items, `scadenze-${(vehicleName || 'storicar').toLowerCase().replace(/\s+/g, '-')}.ics`)
+}
+function onDocClick(e) {
+  if (openCalMenu.value !== null && !e.target.closest('.cal-menu-wrap')) closeCalMenu()
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 function openAddDl() {
   editingDlId.value = null
@@ -290,6 +471,104 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
 
       <!-- ══ SPESE ══ -->
       <template v-if="activeTab === 'spese'">
+
+        <!-- ── Spese ricorrenti ── -->
+        <div v-if="showRpForm" class="card form-card">
+          <h3 class="form-title">{{ editingRpId ? 'Modifica spesa ricorrente' : 'Nuova spesa ricorrente' }}</h3>
+
+          <div class="form-group">
+            <label class="form-label">Nome *</label>
+            <input v-model="rpForm.name" type="text" class="form-input" placeholder="es. Rata finanziamento" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <div class="type-grid">
+              <button
+                v-for="cat in expenseCategoryOptions" :key="cat.value"
+                type="button" class="type-chip"
+                :class="{ active: rpForm.category === cat.value }"
+                @click="rpForm.category = cat.value"
+              >{{ cat.icon || '📋' }} {{ cat.label }}</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Importo (€) *</label>
+              <input v-model="rpForm.amount" type="number" class="form-input" placeholder="0.00" min="0" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prossima scadenza *</label>
+              <input v-model="rpForm.nextDate" type="date" class="form-input" />
+            </div>
+          </div>
+          <p class="rp-hint">
+            Se paghi già questa rata da tempo (es. da dicembre), inserisci qui la data del <strong>primo</strong> pagamento non ancora registrato: al salvataggio potrai generare in un colpo solo tutte le spese arretrate fino ad oggi.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">Frequenza</label>
+            <div class="type-grid">
+              <button
+                v-for="f in FREQUENCIES" :key="f.value"
+                type="button" class="type-chip"
+                :class="{ active: rpForm.frequency === f.value }"
+                @click="rpForm.frequency = f.value"
+              >{{ f.label }}</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Note</label>
+            <textarea v-model="rpForm.notes" class="form-textarea" rows="2" placeholder="Note opzionali…"></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-secondary" @click="showRpForm = false">Annulla</button>
+            <button class="btn btn-primary" @click="saveRp" :disabled="!rpForm.name.trim() || !rpForm.amount || !rpForm.nextDate">
+              {{ editingRpId ? 'Salva' : 'Aggiungi' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="recurring-section">
+          <div class="recurring-header">
+            <span class="recurring-title">🔁 Spese ricorrenti</span>
+            <button class="manage-link" @click="openAddRp">+ Aggiungi</button>
+          </div>
+
+          <p v-if="recurringPayments.length === 0" class="recurring-empty">
+            Nessuna spesa ricorrente (es. rata veicolo, assicurazione mensile…)
+          </p>
+
+          <div v-else class="recurring-list">
+            <div v-for="rp in recurringPayments" :key="rp.id" class="card recurring-card">
+              <div class="ic-top">
+                <span class="dl-icon">{{ getCategoryInfo(rp.category).icon }}</span>
+                <div class="dl-info">
+                  <span class="ic-icon-label">{{ rp.name }}</span>
+                  <span class="ic-sub-inline">{{ freqLabel(rp.frequency) }} · € {{ fmt(rp.amount) }}</span>
+                </div>
+                <span class="dl-badge" :class="rpStatus(rp)">{{ rpLabel(rp) }}</span>
+              </div>
+              <div class="recurring-actions">
+                <button v-if="rpStatus(rp) !== 'ok'" class="btn btn-sm btn-primary rp-pay-btn" @click="markRecurringPaid(rp)">
+                  {{ rpOverdueCount(rp) > 1 ? `✓ Segna ${rpOverdueCount(rp)} pagamenti arretrati` : '✓ Segna come pagata' }}
+                </button>
+                <button class="ic-btn" @click="openEditRp(rp)">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+                <button class="ic-btn danger" @click="confirmDeleteRp(rp)">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
         <div v-if="expenses.length === 0" class="empty-state" style="padding:40px 0">
           <h2>Nessuna spesa</h2><p>Aggiungi la prima spesa</p>
         </div>
@@ -423,6 +702,10 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
             </button>
           </div>
 
+          <button v-if="allDeadlines.length > 0" class="btn btn-sm btn-secondary export-all-btn" @click="exportAllDeadlinesIcs">
+            ⬇️ Esporta tutte (.ics)
+          </button>
+
           <div v-if="deadlines.length === 0" class="empty-state" style="padding:40px 0">
             <h2>Nessuna scadenza</h2><p>Aggiungi la prima scadenza</p>
           </div>
@@ -436,6 +719,15 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
                 </div>
                 <span class="dl-badge" :class="dlStatus(dl)">{{ dlLabel(dl) }}</span>
                 <div class="dl-btns">
+                  <div class="cal-menu-wrap">
+                    <button class="ic-btn" @click.stop="toggleCalMenu(dl.id)" title="Aggiungi al calendario">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    </button>
+                    <div v-if="openCalMenu === dl.id" class="cal-menu" @click.stop>
+                      <button class="cal-menu-item" @click="addDlToGoogle(dl)">📅 Google Calendar</button>
+                      <button class="cal-menu-item" @click="downloadDlIcs(dl)">⬇️ Scarica .ics</button>
+                    </div>
+                  </div>
                   <button class="ic-btn" @click.stop="openEditDl(dl)">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   </button>
@@ -599,6 +891,49 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
 .ic-btn    { width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .ic-btn svg { width: 13px; height: 13px; }
 .ic-btn.danger { color: var(--danger); }
+
+/* Menu "aggiungi al calendario" */
+.cal-menu-wrap { position: relative; }
+.cal-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 20;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm); padding: 4px; display: flex; flex-direction: column; gap: 2px;
+  min-width: 168px;
+}
+.cal-menu-item {
+  background: none; border: none; text-align: left; padding: 8px 10px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 500; color: var(--text-primary); cursor: pointer; white-space: nowrap;
+}
+.cal-menu-item:hover, .cal-menu-item:active { background: var(--bg-secondary); }
+
+.export-all-btn { width: 100%; margin-bottom: 10px; }
+
+/* ── Spese ricorrenti ── */
+.recurring-section { margin-bottom: 4px; }
+.recurring-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.recurring-title  { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.recurring-empty  { font-size: 12.5px; color: var(--text-secondary); padding: 2px 2px 4px; }
+.recurring-list   { display: flex; flex-direction: column; gap: 6px; }
+.recurring-card   { padding: 12px 14px; }
+.recurring-card .ic-top { gap: 10px; align-items: flex-start; }
+.recurring-actions {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.rp-pay-btn { flex: 1; }
+
+.rp-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  margin: -6px 0 14px;
+}
+
+.section-divider { height: 1px; background: var(--border); margin: 4px 0 16px; }
 
 /* ── Timeline ── */
 .tl-filters { display: flex; gap: 6px; margin-bottom: 12px; }

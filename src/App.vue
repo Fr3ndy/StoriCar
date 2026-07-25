@@ -8,7 +8,7 @@ import { useRegisterSW } from 'virtual:pwa-register/vue'
 
 const router = useRouter()
 const route  = useRoute()
-const { getTheme, setTheme, data, dataReady, selectedVehicleId, setDefaultVehicle } = useStorage()
+const { getTheme, setTheme, data, dataReady, selectedVehicleId, setDefaultVehicle, initAccentColor } = useStorage()
 const { user, signOut } = useAuth()
 const { checkDeadlines } = useNotifications()
 
@@ -31,6 +31,18 @@ useRegisterSW({
 
 const currentTheme = computed(() => data.value.settings.theme)
 const menuOpen = ref(false)
+const vehicleSheetOpen = ref(false)
+
+const currentVehicleName = computed(() =>
+  vehicles.value.find(v => v.id === selectedVehicleId.value)?.name || ''
+)
+
+function openVehicleSheet()  { vehicleSheetOpen.value = true }
+function closeVehicleSheet() { vehicleSheetOpen.value = false }
+async function selectVehicleFromSheet(id) {
+  await onHeaderVehicleChange(id)
+  closeVehicleSheet()
+}
 
 // Offline detection
 const isOffline = ref(!navigator.onLine)
@@ -60,7 +72,7 @@ const pageTitle = computed(() => ({
   'fuel-add': 'Nuovo Rifornimento', 'fuel-edit': 'Modifica Rifornimento',
   expenses: 'Spese', 'expenses-add': 'Nuova Spesa', 'expenses-edit': 'Modifica Spesa',
   stats: 'Statistiche', map: 'Mappa',
-  'fuel-prices': 'Prezzi', settings: 'Impostazioni',
+  settings: 'Impostazioni',
   actions: 'Azioni', 'action-add': 'Nuova Azione', 'action-edit': 'Modifica Azione',
   hub: 'Attività', 'fuel-prices': 'Prezzi Carburante'
 }[route.name] || 'Storicar'))
@@ -99,6 +111,7 @@ async function onHeaderVehicleChange(id) {
 
 onMounted(() => {
   setTheme(getTheme())
+  initAccentColor()
 
   watch(dataReady, (ready) => {
     if (!ready) return
@@ -120,26 +133,75 @@ onMounted(() => {
 
     <!-- ── Header ── -->
     <header v-if="isShell" class="header">
-      <!-- <div class="header-left">
-        <div class="header-dot"></div>
-      </div> -->
-      <!-- Vehicle pills (visibili solo quando ci sono veicoli) -->
-      <div v-if="vehicles.length > 0" class="header-vehicles">
-        <button
-          v-for="v in vehicles"
-          :key="v.id"
-          class="vehicle-pill"
-          :class="{ active: v.id === selectedVehicleId }"
-          @click="onHeaderVehicleChange(v.id)"
-        >{{ v.name }}</button>
+      <div class="header-top">
+        <h1 class="header-title">{{ pageTitle }}</h1>
+        <button class="header-settings-btn" @click="router.push('/settings')" title="Impostazioni" :class="{ active: route.name === 'settings' }">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
       </div>
-      <button class="header-settings-btn" @click="router.push('/settings')" title="Impostazioni" :class="{ active: route.name === 'settings' }">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+
+      <!-- Selettore veicolo (visibile solo quando ci sono veicoli) -->
+      <button v-if="vehicles.length > 0" class="vehicle-select-btn" @click="openVehicleSheet">
+        <span class="vs-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
+          </svg>
+        </span>
+        <span class="vs-name">{{ currentVehicleName }}</span>
+        <svg v-if="vehicles.length > 1" class="vs-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
         </svg>
       </button>
     </header>
+
+    <!-- ── Vehicle switcher overlay + sheet ── -->
+    <Transition name="overlay">
+      <div v-if="vehicleSheetOpen" class="drawer-overlay" @click="closeVehicleSheet"/>
+    </Transition>
+    <Transition name="drawer">
+      <div v-if="vehicleSheetOpen" class="drawer vsheet">
+        <div class="drawer-handle"></div>
+        <div class="drawer-header">
+          <span class="drawer-title">Seleziona veicolo</span>
+          <button class="btn-icon" @click="closeVehicleSheet">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="drawer-body">
+          <button
+            v-for="v in vehicles" :key="v.id"
+            class="vsheet-item" :class="{ active: v.id === selectedVehicleId }"
+            @click="selectVehicleFromSheet(v.id)"
+          >
+            <span class="drawer-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9l-1 4h20l-1-4"/>
+              </svg>
+            </span>
+            <span class="drawer-item-label">{{ v.name }}</span>
+            <svg v-if="v.id === selectedVehicleId" class="vsheet-check" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+          </button>
+
+          <div class="drawer-divider"></div>
+
+          <button class="drawer-item" @click="navigateTo('/vehicles'); closeVehicleSheet()">
+            <span class="drawer-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+              </svg>
+            </span>
+            <span class="drawer-item-label">Gestisci veicoli</span>
+          </button>
+        </div>
+      </div>
+    </Transition>
 
     <!-- ── Offline banner ── -->
     <Transition name="banner">
@@ -304,31 +366,15 @@ onMounted(() => {
 .app { min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ── Header ── */
+.header { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; }
+
+.header-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.header-title {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .header-left { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-
-.header-vehicles {
-  display: flex; gap: 5px; overflow-x: auto; flex: 1;
-  padding: 0 8px; scrollbar-width: none;
-}
-.header-vehicles::-webkit-scrollbar { display: none; }
-
-.vehicle-pill {
-  padding: 4px 11px;
-  border-radius: 20px;
-  border: 1.5px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 14px; font-weight: 600;
-  cursor: pointer; white-space: nowrap;
-  transition: all .15s;
-  flex-shrink: 0;
-}
-.vehicle-pill.active {
-  background: var(--text-primary);
-  color: var(--bg-card);
-  border-color: var(--text-primary);
-}
-.vehicle-pill:not(.active):active { opacity: .7; }
 
 .header-dot {
   width: 7px; height: 7px;
@@ -336,6 +382,40 @@ onMounted(() => {
   background: var(--text-primary);
   flex-shrink: 0;
 }
+
+/* Selettore veicolo (bottone singolo, sostituisce le pillole) */
+.vehicle-select-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--r);
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer; width: 100%;
+  transition: background .15s;
+}
+.vehicle-select-btn:active { background: var(--border); }
+.vs-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-secondary); }
+.vs-icon svg { width: 16px; height: 16px; }
+.vs-name {
+  flex: 1; min-width: 0; text-align: left;
+  font-size: 14px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vs-chevron { width: 15px; height: 15px; color: var(--text-tertiary); flex-shrink: 0; }
+
+/* Sheet selezione veicolo (riusa gli stili .drawer / .drawer-item) */
+.vsheet-item {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-primary); font-size: 14px; font-weight: 500;
+  text-align: left; transition: background .12s;
+}
+.vsheet-item:active { background: var(--bg-secondary); }
+.vsheet-item.active .drawer-item-label { font-weight: 700; }
+.vsheet-item.active .drawer-icon { background: var(--text-primary); color: var(--bg-card); border-color: var(--text-primary); }
+.vsheet-check { width: 17px; height: 17px; color: var(--text-primary); flex-shrink: 0; }
 
 /* ── Offline banner ── */
 .offline-banner {

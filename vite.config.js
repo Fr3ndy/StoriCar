@@ -21,7 +21,7 @@ export default defineConfig({
         name: 'Storicar',
         short_name: 'Storicar',
         description: 'Il diario di bordo dei tuoi consumi',
-        theme_color: '#2563eb',
+        theme_color: '#000ba5',
         background_color: '#0a0f1e',
         display: 'standalone',
         orientation: 'portrait',

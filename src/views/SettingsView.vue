@@ -158,10 +158,26 @@ const {
   getSetting,
   saveToFile,
   importData,
-  clearAllData
+  clearAllData,
+  getAccentColor,
+  setAccentColor,
+  DEFAULT_ACCENT
 } = useStorage()
 
 const currentTheme = computed(() => data.value.settings.theme)
+
+// ── Colore d'accento (salvato solo su questo dispositivo) ──────
+const accentSwatches = [
+  { hex: '#2563eb', label: 'Blu' },
+  { hex: '#6366f1', label: 'Indaco' },
+  { hex: '#059669', label: 'Verde' },
+  { hex: '#f97316', label: 'Arancio' },
+]
+const currentAccent = ref(getAccentColor() || DEFAULT_ACCENT)
+function selectAccent(hex) {
+  currentAccent.value = hex
+  setAccentColor(hex)
+}
 const consumptionUnit = computed({
   get: () => getConsumptionUnit(),
   set: (val) => setConsumptionUnit(val)
@@ -425,6 +441,30 @@ async function resetData() {
             </svg>
             Scuro
           </button>
+        </div>
+      </div>
+
+      <div class="setting-item setting-item-col">
+        <div class="setting-info">
+          <div class="setting-label">Colore d'accento</div>
+          <div class="setting-description">Personalizza il colore principale dell'app — salvato solo su questo dispositivo</div>
+        </div>
+        <div class="accent-row">
+          <button
+            v-for="sw in accentSwatches" :key="sw.hex"
+            type="button" class="accent-swatch"
+            :class="{ active: currentAccent.toLowerCase() === sw.hex.toLowerCase() }"
+            :style="{ background: sw.hex }" :title="sw.label"
+            @click="selectAccent(sw.hex)"
+          >
+            <svg v-if="currentAccent.toLowerCase() === sw.hex.toLowerCase()" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+            </svg>
+          </button>
+          <label class="accent-custom">
+            <input type="color" :value="currentAccent" @input="e => selectAccent(e.target.value)" />
+            Personalizza
+          </label>
         </div>
       </div>
     </div>
@@ -1191,6 +1231,55 @@ async function resetData() {
   background: var(--primary);
   border-color: var(--primary);
   color: white;
+}
+
+/* ── Colore d'accento ── */
+.accent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: 4px;
+}
+.accent-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 0 0 1.5px var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform .12s, box-shadow .12s;
+}
+.accent-swatch:active { transform: scale(0.9); }
+.accent-swatch.active { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--text-primary); }
+.accent-swatch svg { width: 14px; height: 14px; }
+
+.accent-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 20px;
+  border: 1.5px dashed var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.accent-custom input[type="color"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
 }
 
 /* ── Toggle switch ── */
