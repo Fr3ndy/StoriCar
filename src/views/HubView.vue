@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStorage } from '../composables/useStorage'
+import { useCalendarExport } from '../composables/useCalendarExport'
 
 const router = useRouter()
 const {
@@ -10,6 +11,7 @@ const {
   addDeadline, updateDeadline, deleteDeadline, getDeadlinesByVehicle,
   getSetting, setSetting
 } = useStorage()
+const { openInGoogleCalendar, exportDeadlineIcs, exportDeadlinesIcs } = useCalendarExport()
 
 const activeTab = ref('spese') // spese | azioni | scadenze | timeline
 
@@ -176,6 +178,38 @@ async function resetDlTypes() {
 const showDlForm  = ref(false)
 const editingDlId = ref(null)
 const dlForm = ref({ type: 'assicurazione', description: '', expiryDate: '', amount: '', reminderDays: 30, notes: '' })
+
+// ── Export calendario (Google Calendar / .ics) ─────────────────
+const openCalMenu = ref(null) // id della scadenza con il menu aperto
+
+function currentVehicleName() {
+  return vehicles.value.find(v => v.id === selectedVehicleId.value)?.name || ''
+}
+function toggleCalMenu(id) {
+  openCalMenu.value = openCalMenu.value === id ? null : id
+}
+function closeCalMenu() {
+  openCalMenu.value = null
+}
+function addDlToGoogle(dl) {
+  openInGoogleCalendar(dl, getDlType(dl.type).label, currentVehicleName())
+  closeCalMenu()
+}
+function downloadDlIcs(dl) {
+  exportDeadlineIcs(dl, getDlType(dl.type).label, currentVehicleName())
+  closeCalMenu()
+}
+function exportAllDeadlinesIcs() {
+  const vehicleName = currentVehicleName()
+  const items = deadlines.value.map(dl => ({ dl, typeLabel: getDlType(dl.type).label, vehicleName }))
+  if (!items.length) return
+  exportDeadlinesIcs(items, `scadenze-${(vehicleName || 'storicar').toLowerCase().replace(/\s+/g, '-')}.ics`)
+}
+function onDocClick(e) {
+  if (openCalMenu.value !== null && !e.target.closest('.cal-menu-wrap')) closeCalMenu()
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 function openAddDl() {
   editingDlId.value = null
@@ -423,6 +457,10 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
             </button>
           </div>
 
+          <button v-if="allDeadlines.length > 0" class="btn btn-sm btn-secondary export-all-btn" @click="exportAllDeadlinesIcs">
+            ⬇️ Esporta tutte (.ics)
+          </button>
+
           <div v-if="deadlines.length === 0" class="empty-state" style="padding:40px 0">
             <h2>Nessuna scadenza</h2><p>Aggiungi la prima scadenza</p>
           </div>
@@ -436,6 +474,15 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
                 </div>
                 <span class="dl-badge" :class="dlStatus(dl)">{{ dlLabel(dl) }}</span>
                 <div class="dl-btns">
+                  <div class="cal-menu-wrap">
+                    <button class="ic-btn" @click.stop="toggleCalMenu(dl.id)" title="Aggiungi al calendario">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    </button>
+                    <div v-if="openCalMenu === dl.id" class="cal-menu" @click.stop>
+                      <button class="cal-menu-item" @click="addDlToGoogle(dl)">📅 Google Calendar</button>
+                      <button class="cal-menu-item" @click="downloadDlIcs(dl)">⬇️ Scarica .ics</button>
+                    </div>
+                  </div>
                   <button class="ic-btn" @click.stop="openEditDl(dl)">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   </button>
@@ -599,6 +646,22 @@ function fmt(n, d = 2) { return n != null ? n.toFixed(d).replace('.', ',') : '�
 .ic-btn    { width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .ic-btn svg { width: 13px; height: 13px; }
 .ic-btn.danger { color: var(--danger); }
+
+/* Menu "aggiungi al calendario" */
+.cal-menu-wrap { position: relative; }
+.cal-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 20;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm); padding: 4px; display: flex; flex-direction: column; gap: 2px;
+  min-width: 168px;
+}
+.cal-menu-item {
+  background: none; border: none; text-align: left; padding: 8px 10px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 500; color: var(--text-primary); cursor: pointer; white-space: nowrap;
+}
+.cal-menu-item:hover, .cal-menu-item:active { background: var(--bg-secondary); }
+
+.export-all-btn { width: 100%; margin-bottom: 10px; }
 
 /* ── Timeline ── */
 .tl-filters { display: flex; gap: 6px; margin-bottom: 12px; }
